@@ -1,0 +1,84 @@
+name: Plume
+options:
+  bundleIdPrefix: com.plume
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Plume:
+    type: application
+    platform: macOS
+    sources:
+      - path: Plume
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.plume.app
+        INFOPLIST_FILE: Plume/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Plume/Resources/plume.entitlements
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+        ENABLE_TESTABILITY: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: Plume/Support/Plume-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/../third_party/sherpa-onnx/include"
+        LIBRARY_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/../third_party/sherpa-onnx/lib"
+        OTHER_LDFLAGS:
+          - "-lsherpa-onnx-c-api"
+          - "-lsherpa-onnx-core"
+          - "-lsherpa-onnx-kaldifst-core"
+          - "-lkaldi-decoder-core"
+          - "-lsherpa-onnx-fstfar"
+          - "-lsherpa-onnx-fst"
+          - "-lkaldi-native-fbank-core"
+          - "-lkissfft-float"
+          - "-lpiper_phonemize"
+          - "-lespeak-ng"
+          - "-lucd"
+          - "-lonnxruntime"
+          - "-lssentencepiece_core"
+          - "-lc++"
+        # Optional legacy icns if present
+        # ICON: Plume/Resources/AppIcon.icns
+  PlumeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: PlumeTests
+    dependencies:
+      - target: Plume
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.plume.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Plume.app/Contents/MacOS/Plume"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        # The test target rescans the app's bridging header via @testable import.
+        HEADER_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/../third_party/sherpa-onnx/include"
+schemes:
+  Plume:
+    build:
+      targets:
+        Plume: all
+        PlumeTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PlumeTests

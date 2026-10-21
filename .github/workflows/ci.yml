@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: cd Plume && xcodegen generate
+      - name: Build Plume
+        run: |
+          cd Plume
+          xcodebuild -project Plume.xcodeproj -scheme Plume \
+            -destination 'platform=macOS,arch=arm64' \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="-" CODE_SIGNING_ALLOWED=YES \
+            build
+      - name: Unit tests
+        run: bash scripts/test-plume.sh
+
+  build-dmg:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: bash scripts/package-plume-dmg.sh Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plume-dmg
+          path: dist/*.dmg

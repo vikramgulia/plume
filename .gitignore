@@ -1,0 +1,18 @@
+dist/
+build/
+.DS_Store
+*.log
+out/
+
+# Native helpers
+extraResources/ffmpeg
+
+# Xcode
+Plume/Plume.xcodeproj/xcuserdata/
+Plume/Plume.xcodeproj/project.xcworkspace/xcuserdata/
+**/DerivedData/
+*.xcuserstate
+
+# sherpa-onnx vendored libs and diarization models (fetched via scripts/fetch-sherpa.sh)
+third_party/
+extraResources/diarization-models/
