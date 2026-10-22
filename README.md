@@ -1,17 +1,25 @@
+<p align="center"><img src="docs/icon.png" width="128" alt="Plume icon"></p>
+
 # Plume
 
-> Repository folder may still be named `ai-rekord` — the product is **Plume**.
+Record your **microphone and system audio** on macOS whenever you want — meetings, calls, lectures — and optionally get a transcript. Everything happens on your Mac: recordings, transcripts and speaker voice profiles are stored locally and **never sent to any cloud**.
 
-Native **macOS** app (SwiftUI) that records **system audio + microphone** during meetings using Apple's **ScreenCaptureKit**, with optional **on-device** transcription via Apple's **Speech framework**. No virtual audio drivers, no cloud.
+Built with SwiftUI and Apple's ScreenCaptureKit. No virtual audio drivers needed.
 
 ## Features
 
-- Record system audio + microphone mixed into M4A or WAV
-- Menu bar controls and floating recording pill
-- Recordings library with playback, rename, delete
-- Speaker diarization — transcripts are labeled per speaker, and voices are remembered across meetings (all on-device)
-- Local transcription (Apple Speech framework) — audio and text stay on your Mac
+- Record system audio + microphone into a single M4A or WAV file
+- Menu bar controls and a floating recording pill
+- Recordings library with playback, rename and delete
+- On-device transcription (Apple Speech framework), optionally automatic when a recording stops
+- Speaker labels in transcripts, with voices remembered across recordings (on-device)
 - Themes: system / light / dark
+
+## Privacy
+
+- Audio, transcripts and speaker profiles stay in your save folder (default `~/Documents/Plume`) and app preferences
+- Transcription and speaker identification run entirely on-device; Plume makes no network calls for them
+- Speech language assets are managed by macOS and downloaded by the system only when you pick a language
 
 ## Requirements
 
@@ -22,10 +30,13 @@ Native **macOS** app (SwiftUI) that records **system audio + microphone** during
 ## Quick start
 
 ```bash
-# 1. Generate the Xcode project
+# 1. Fetch sherpa-onnx libs + diarization models (one-time)
+bash scripts/fetch-sherpa.sh
+
+# 2. Generate the Xcode project
 cd Plume && xcodegen generate && open Plume.xcodeproj
 
-# 2. In Xcode: select the Plume scheme → Run
+# 3. In Xcode: select the Plume scheme → Run
 # Grant Screen Recording + Microphone when prompted.
 ```
 
@@ -74,6 +85,7 @@ bash scripts/package-plume-dmg.sh Release  # dist/Plume-<version>-arm64.dmg
 | `bash scripts/fetch-sherpa.sh` | Download sherpa-onnx libs + diarization models (one-time) |
 | `bash scripts/package-plume-dmg.sh` | Build app + UDZO DMG |
 | `bash scripts/test-plume.sh` | Run Plume unit tests |
+| `python3 scripts/generate-icons.py` | Regenerate the app icon (needs Pillow) |
 | `bash scripts/clean.sh` | Remove local build artifacts |
 | `bash scripts/create-local-signing-cert.sh` | Create a self-signed cert for stable local signing |
 
@@ -98,19 +110,14 @@ Preferences use `UserDefaults` (app suite). Defaults:
 SwiftUI (Home / Recordings / Settings / MenuBarExtra / Pill)
     ├── RecordingService → SystemAudioCapture (ScreenCaptureKit) + MicCapture → AudioFileWriter (AVAssetWriter, stereo L=speaker R=mic)
     ├── TranscriptionService → Speech framework (SpeechAnalyzer, on-device) + sherpa-onnx diarization (speaker labels)
-    └── SpeakerLibrary → voice profiles remembered across recordings (local)
+    ├── SpeakerLibrary → voice profiles remembered across recordings (local)
     ├── RecordingLibrary → folder watch, rename/delete + transcript sidecars
-    ├── TranscriptionService → Speech framework (SpeechAnalyzer, on-device)
     └── PreferencesStore → UserDefaults
 ```
 
-| Resource | Dev | Packaged |
-|----------|-----|----------|
-| App | Xcode Run / `build/DerivedData/.../Plume.app` | `Plume.app` |
-
 ## Transcription
 
-Fully local: transcripts via Apple's **Speech framework**, speaker labels via **sherpa-onnx** (bundled models, runs on-device). (`SpeechAnalyzer` + `SpeechTranscriber`, macOS 26+). Transcripts are written as `.txt` sidecars next to recordings (`Recording ….txt`). Language models are system-managed on-device assets — the app downloads the selected language's asset via `AssetInventory` when needed; nothing is sent off your Mac.
+Fully local: transcripts via Apple's **Speech framework** (`SpeechAnalyzer` + `SpeechTranscriber`, macOS 26+), speaker labels via **sherpa-onnx** (bundled models). Transcripts are written as `.txt` sidecars next to recordings (`Recording ….txt`). Language models are system-managed on-device assets, fetched by macOS via `AssetInventory` when needed; your audio and text never leave your Mac.
 
 Supported locales (on-device): English (en-US), German (de-DE), Spanish (es-419), French (fr-FR), Italian (it-IT), Japanese (ja-JP), Korean (ko-KR), Portuguese (pt-BR), Chinese (zh-CN). Check Settings → Transcription for the live list on your Mac.
 
@@ -126,7 +133,8 @@ Plume/                    Native SwiftUI app (xcodegen)
   Plume/                  Sources
   PlumeTests/             Unit tests
   project.yml             XcodeGen spec
-scripts/                  build, DMG, test, clean
+docs/                     README assets
+scripts/                  build, DMG, test, icons, clean
 ```
 
 ## Troubleshooting
