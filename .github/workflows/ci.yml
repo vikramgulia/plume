@@ -5,12 +5,31 @@ on:
     branches: [main, master]
     tags: ['v*']
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SHERPA_CACHE_KEY: sherpa-${{ hashFiles('scripts/fetch-sherpa.sh') }}
 
 jobs:
   test:
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Restore sherpa-onnx libs and models
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/sherpa-onnx
+            extraResources/diarization-models
+          key: ${{ env.SHERPA_CACHE_KEY }}
+      - name: Fetch sherpa-onnx libs and models
+        run: bash scripts/fetch-sherpa.sh
       - name: Generate Xcode project
         run: cd Plume && xcodegen generate
       - name: Build Plume
@@ -24,14 +43,46 @@ jobs:
       - name: Unit tests
         run: bash scripts/test-plume.sh
 
-  build-dmg:
-    if: startsWith(github.ref, 'refs/tags/v')
+  # Builds the DMG on every push to main (downloadable from the run's
+  # Artifacts) and on v* tags, where it is also attached to a GitHub Release.
+  package:
+    if: github.event_name != 'pull_request'
+    needs: test
     runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: brew install xcodegen
-      - run: bash scripts/package-plume-dmg.sh Release
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Restore sherpa-onnx libs and models
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/sherpa-onnx
+            extraResources/diarization-models
+          key: ${{ env.SHERPA_CACHE_KEY }}
+      - name: Fetch sherpa-onnx libs and models
+        run: bash scripts/fetch-sherpa.sh
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build DMG
+        run: PLUME_VERSION="${{ steps.version.outputs.value }}" bash scripts/package-plume-dmg.sh Release
       - uses: actions/upload-artifact@v4
         with:
-          name: Plume-dmg
+          name: Plume-${{ steps.version.outputs.value }}-dmg
           path: dist/*.dmg
+          if-no-files-found: error
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.dmg
+          generate_release_notes: true

@@ -147,6 +147,16 @@ scripts/                  build, DMG, test, icons, clean
 | "Speech transcription is not available" | On-device transcription needs a supported Mac; check Settings → Transcription |
 | "Language not supported" | Pick a different language in Settings → Transcription, or install its assets first |
 
+## Releases and tracking
+
+Every push to `main` builds a DMG, available under the run's **Artifacts** in the Actions tab. Pushing a tag like `v1.1.0` publishes it as a GitHub Release with generated notes:
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+Builds are ad-hoc signed, so on first launch right-click the app and choose **Open**. Bugs, feature ideas and to-dos are tracked as [GitHub Issues](../../issues).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
