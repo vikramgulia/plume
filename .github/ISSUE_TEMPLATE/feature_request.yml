@@ -1,0 +1,14 @@
+name: Feature / to-do
+description: A feature idea or task to track
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What should Plume do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter?
