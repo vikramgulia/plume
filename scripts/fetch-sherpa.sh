@@ -8,6 +8,8 @@ MODELS="$ROOT/extraResources/diarization-models"
 
 LIBS_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.3/sherpa-onnx-v1.13.3-osx-arm64-static-lib.tar.bz2"
 SEG_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
+# The static-lib archive ships no headers; the C API header comes from the same tag.
+HEADER_URL="https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.3/sherpa-onnx/c-api/c-api.h"
 EMB_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx"
 
 fetch() {
@@ -37,6 +39,8 @@ if [[ ! -f "$TP/lib/libsherpa-onnx-c-api.a" ]]; then
 else
   echo "SKIP sherpa-onnx static libs (exists)"
 fi
+
+fetch "$HEADER_URL" "$TP/include/c-api.h"
 
 mkdir -p "$MODELS"
 if [[ ! -f "$MODELS/segmentation.onnx" ]]; then

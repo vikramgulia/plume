@@ -10,9 +10,6 @@ on:
 permissions:
   contents: read
 
-env:
-  SHERPA_CACHE_KEY: sherpa-${{ hashFiles('scripts/fetch-sherpa.sh') }}
-
 jobs:
   test:
     runs-on: macos-26
@@ -27,7 +24,7 @@ jobs:
           path: |
             third_party/sherpa-onnx
             extraResources/diarization-models
-          key: ${{ env.SHERPA_CACHE_KEY }}
+          key: sherpa-${{ hashFiles('scripts/fetch-sherpa.sh') }}
       - name: Fetch sherpa-onnx libs and models
         run: bash scripts/fetch-sherpa.sh
       - name: Generate Xcode project
@@ -62,7 +59,7 @@ jobs:
           path: |
             third_party/sherpa-onnx
             extraResources/diarization-models
-          key: ${{ env.SHERPA_CACHE_KEY }}
+          key: sherpa-${{ hashFiles('scripts/fetch-sherpa.sh') }}
       - name: Fetch sherpa-onnx libs and models
         run: bash scripts/fetch-sherpa.sh
       - name: Resolve version
