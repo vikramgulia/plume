@@ -29,6 +29,7 @@ final class RecordingService: ObservableObject {
     private var outputURL: URL?
     private var starting = false
     private var stopRequestedDuringStart = false
+    private var receivedSystemAudio = false
 
     func start(withMicrophone: Bool) async {
         guard state == .idle, !starting else { return }
@@ -36,6 +37,7 @@ final class RecordingService: ObservableObject {
         defer { starting = false }
         lastError = nil
         stopRequestedDuringStart = false
+        receivedSystemAudio = false
         withMic = withMicrophone
 
         let folder = prefs.saveFolder
@@ -73,34 +75,18 @@ final class RecordingService: ObservableObject {
             }
         }
 
-        // First system audio creates the writer and flips the UI to recording.
+        // Recording begins as soon as capture is running (or the first audio arrives),
+        // not only once something is playing; a silent source is padded with silence.
+        capture.onStarted = { [weak self] in
+            Task { @MainActor in self?.beginRecording(to: url) }
+        }
+
         capture.onPCM = { [weak self] data, level in
             Task { @MainActor in
                 guard let self else { return }
                 self.systemLevel = level
-                if self.writer == nil {
-                    do {
-                        let w = AudioFileWriter()
-                        try w.start(format: self.prefs.format, output: url)
-                        self.writer = w
-                        self.state = .recording
-                        self.startedAt = Date()
-                        self.elapsed = 0
-                        self.startTimer()
-                        Diag.log("REC first system PCM -> writer created, state=.recording")
-                        // Bluetooth devices often stop delivering when their audio
-                        // profile switches at capture start — give the mic one kick.
-                        if self.withMic, let mic = self.micCapture, !mic.hasDeliveredFrames {
-                            Diag.log("REC mic has no frames — kicking restart")
-                            mic.restart()
-                        }
-                    } catch {
-                        Diag.log("REC writer start failed: \(error.localizedDescription)")
-                        self.lastError = error.localizedDescription
-                        self.failCleanup()
-                        return
-                    }
-                }
+                self.receivedSystemAudio = true
+                if self.writer == nil { self.beginRecording(to: url) }
                 self.writer?.appendSystem(data)
             }
         }
@@ -122,7 +108,7 @@ final class RecordingService: ObservableObject {
 
         capture.start()
 
-        // Give ScreenCaptureKit up to 15 seconds to deliver first audio.
+        // Give ScreenCaptureKit up to 15 seconds to start capturing.
         for _ in 0..<150 {
             if state == .recording || captureError != nil || stopRequestedDuringStart { break }
             try? await Task.sleep(nanoseconds: 100_000_000)
@@ -135,10 +121,44 @@ final class RecordingService: ObservableObject {
         }
 
         if state != .recording {
-            if captureError == nil {
-                lastError = "No system audio received. Check Screen Recording permission and that a meeting is playing audio."
+            if captureError == nil && lastError == nil {
+                lastError = "Could not start capturing system audio. Check the Screen Recording permission."
             }
             failCleanup()
+        }
+    }
+
+    /// Creates the writer and flips the UI to recording. Safe to call more than once.
+    private func beginRecording(to url: URL) {
+        guard writer == nil, state == .idle, starting, url == outputURL else { return }
+        do {
+            let w = AudioFileWriter()
+            try w.start(format: prefs.format, output: url)
+            writer = w
+            state = .recording
+            startedAt = Date()
+            elapsed = 0
+            startTimer()
+            Diag.log("REC writer created, state=.recording")
+        } catch {
+            Diag.log("REC writer start failed: \(error.localizedDescription)")
+            lastError = error.localizedDescription
+            failCleanup()
+            return
+        }
+        // Bluetooth devices often stop delivering when their audio profile switches
+        // at capture start; give the mic one kick if it is still silent shortly after.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self, self.state == .recording, self.withMic,
+                  let mic = self.micCapture, !mic.hasDeliveredFrames else { return }
+            Diag.log("REC mic has no frames — kicking restart")
+            mic.restart()
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard let self, self.state == .recording, !self.receivedSystemAudio else { return }
+            Diag.log("REC no system audio received after 10s (nothing playing, or capture is silent)")
         }
     }
 

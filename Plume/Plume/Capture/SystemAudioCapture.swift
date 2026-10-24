@@ -11,6 +11,8 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unc
     /// (mono 48k Float32 PCM chunk, RMS level 0...1)
     var onPCM: ((Data, Float) -> Void)?
     var onError: ((Error) -> Void)?
+    /// Called once the stream is actually capturing.
+    var onStarted: (() -> Void)?
 
     private var stream: SCStream?
     private let queue = DispatchQueue(label: "com.plume.systemaudio")
@@ -78,6 +80,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unc
                     self?.onError?(error)
                 } else {
                     Diag.log("SCK capture started")
+                    self?.onStarted?()
                 }
             }
         }
