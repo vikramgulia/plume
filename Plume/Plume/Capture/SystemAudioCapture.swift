@@ -57,6 +57,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unc
             config.height = 2
             config.sampleRate = 48000
             config.channelCount = 2
+            config.excludesCurrentProcessAudio = true
             config.showsCursor = false
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
