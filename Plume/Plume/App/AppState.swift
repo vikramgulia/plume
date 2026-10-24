@@ -73,6 +73,22 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Saves any recording still in progress. Waits out a stop that is already underway.
+    func finalizeRecordingForQuit() async {
+        switch recording.state {
+        case .recording:
+            _ = await recording.stop()
+        case .stopping:
+            var waited = 0
+            while recording.state == .stopping && waited < 100 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waited += 1
+            }
+        case .idle:
+            break
+        }
+    }
+
     func stopRecording() async {
         let url = await recording.stop()
         await library.reload()
