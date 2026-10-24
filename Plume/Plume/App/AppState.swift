@@ -36,6 +36,10 @@ final class AppState: ObservableObject {
         transcription.objectWillChange.receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
 
+        recording.onNotice = { [weak self] message in
+            Task { @MainActor in self?.showToast(message) }
+        }
+
         recording.onUnexpectedStop = { [weak self] url in
             Task { @MainActor in await self?.finishRecording(url, interrupted: true) }
         }

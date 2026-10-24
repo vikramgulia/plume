@@ -16,6 +16,9 @@ final class RecordingService: ObservableObject {
     @Published var lastError: String?
     @Published var lastOutputURL: URL?
 
+    /// Non-fatal problems while recording (for example the microphone stopped).
+    var onNotice: ((String) -> Void)?
+
     /// Called when capture fails mid-recording and the partial recording was saved.
     var onUnexpectedStop: ((URL?) -> Void)?
 
@@ -92,6 +95,13 @@ final class RecordingService: ObservableObject {
         }
 
         if withMicrophone {
+            mic.onError = { [weak self] err in
+                Task { @MainActor in
+                    guard let self, self.state == .recording else { return }
+                    self.micLevel = 0
+                    self.onNotice?("Microphone stopped (\(err.localizedDescription)). System audio is still recording.")
+                }
+            }
             mic.onPCM = { [weak self] data, level in
                 Task { @MainActor in
                     self?.micLevel = level
