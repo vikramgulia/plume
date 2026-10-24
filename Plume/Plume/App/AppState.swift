@@ -36,6 +36,10 @@ final class AppState: ObservableObject {
         transcription.objectWillChange.receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
 
+        recording.onUnexpectedStop = { [weak self] url in
+            Task { @MainActor in await self?.finishRecording(url, interrupted: true) }
+        }
+
         recording.$state
             .receive(on: RunLoop.main)
             .sink { [weak self] state in
@@ -91,12 +95,21 @@ final class AppState: ObservableObject {
 
     func stopRecording() async {
         let url = await recording.stop()
+        await finishRecording(url)
+    }
+
+    private func finishRecording(_ url: URL?, interrupted: Bool = false) async {
         await library.reload()
         if let url {
-            showToast("Recording saved")
             if preferences.autoTranscribe {
                 transcription.start(url)
             }
+            if interrupted {
+                let reason = recording.lastError ?? "capture stopped"
+                showToast("Recording stopped (\(reason)). What was captured is saved.")
+                return
+            }
+            showToast("Recording saved")
         }
         if let err = recording.lastError {
             showToast(err)
