@@ -8,7 +8,7 @@ final class StereoAlignerTests: XCTestCase {
         (start..<start + count).map { Float($0) * scale }
     }
 
-    func testContinuousSourcesStayFrameAligned() {
+    func testContinuousSourcesStayFrameAligned() throws {
         var a = StereoAligner()
         let chunk = 480
         for k in 0..<100 {
@@ -16,7 +16,7 @@ final class StereoAlignerTests: XCTestCase {
             a.push(ramp(from: k * chunk, count: chunk), source: .system, at: t)
             a.push(ramp(from: k * chunk, count: chunk, scale: -1), source: .mic, at: t)
         }
-        let out = try! XCTUnwrap(a.peekAll(maxFrames: 100_000))
+        let out = try XCTUnwrap(a.peekAll(maxFrames: 100_000))
         XCTAssertEqual(out.count, 48000 * 2)
         for f in stride(from: 0, to: 48000, by: 997) {
             XCTAssertEqual(out[f * 2], Float(f))
@@ -24,26 +24,26 @@ final class StereoAlignerTests: XCTestCase {
         }
     }
 
-    func testLateStartingMicIsPlacedAtItsRealTime() {
+    func testLateStartingMicIsPlacedAtItsRealTime() throws {
         var a = StereoAligner()
         a.push([Float](repeating: 0.5, count: 48000), source: .system, at: 1.0)
         // First mic buffer arrives half a second in and covers the 480 frames before that.
         a.push([Float](repeating: 1, count: 480), source: .mic, at: 0.5)
 
-        let out = try! XCTUnwrap(a.peekAll(maxFrames: 100_000))
+        let out = try XCTUnwrap(a.peekAll(maxFrames: 100_000))
         let firstMicFrame = 24000 - 480
         XCTAssertEqual(out[(firstMicFrame - 1) * 2 + 1], 0, "silence before the mic started")
         XCTAssertEqual(out[firstMicFrame * 2 + 1], 1, "mic lands at its real position")
         XCTAssertEqual(out[(firstMicFrame + 479) * 2 + 1], 1)
     }
 
-    func testQuietSourceGapIsSilenceNotAShift() {
+    func testQuietSourceGapIsSilenceNotAShift() throws {
         var a = StereoAligner()
         a.push([Float](repeating: 1, count: 4800), source: .system, at: 0.125)
         // Nothing for a while (no buffers while silent), then audio resumes at t = 1.5 s.
         a.push([Float](repeating: 2, count: 4800), source: .system, at: 1.5)
 
-        let out = try! XCTUnwrap(a.peekAll(maxFrames: 200_000))
+        let out = try XCTUnwrap(a.peekAll(maxFrames: 200_000))
         XCTAssertEqual(out.count, 72000 * 2)
         let resume = 72000 - 4800
         XCTAssertEqual(out[(resume - 1) * 2], 0)
@@ -126,7 +126,7 @@ final class AudioFileWriterAlignmentTests: XCTestCase {
 
         let samples = try Data(contentsOf: url).dropFirst(44).withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
         XCTAssertEqual(samples.count / 2, 48000)
-        let micStart = 25000 - 480  // chunk k = 50 arrives at 0.51 s and covers the 480 frames before it
+        let micStart = 24000  // chunk 50 arrives at 0.51 s and covers the 480 frames before it
         XCTAssertEqual(samples[(micStart - 100) * 2 + 1], 0, "mic channel silent before it joined")
         XCTAssertEqual(samples[(micStart + 100) * 2 + 1], 0.25, "mic present afterwards")
         XCTAssertEqual(samples[100 * 2], 0.5, "system present from the start")
