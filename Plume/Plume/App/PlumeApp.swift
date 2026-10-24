@@ -86,6 +86,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
+
+    /// Finish and save an in-progress recording before quitting, so the file is playable.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let appState, appState.recording.state != .idle else { return .terminateNow }
+        Task { @MainActor in
+            await appState.finalizeRecordingForQuit()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }
 
 struct ContentView: View {
