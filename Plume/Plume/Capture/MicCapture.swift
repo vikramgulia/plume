@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 
-/// Captures microphone as Float32 mono PCM at 44.1 kHz.
+/// Captures microphone as Float32 mono PCM at 48 kHz.
 final class MicCapture: @unchecked Sendable {
     var onPCM: ((Data, Float) -> Void)?
     var onError: ((Error) -> Void)?
@@ -11,6 +11,8 @@ final class MicCapture: @unchecked Sendable {
     private let lock = NSLock()
     private var delivered = false
     private var bufferCount = 0
+    private var configObserver: NSObjectProtocol?
+    private var lastConfigRestart = Date.distantPast
 
     /// Whether the input tap has produced at least one buffer.
     var hasDeliveredFrames: Bool {
@@ -88,6 +90,24 @@ final class MicCapture: @unchecked Sendable {
         engine.prepare()
         try engine.start()
         started = true
+
+        // The engine stops itself when the input device changes (AirPods connect,
+        // a USB mic is unplugged, ...); rebuild the tap on the new device.
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            self?.handleConfigurationChange()
+        }
+    }
+
+    private func handleConfigurationChange() {
+        lock.lock()
+        let shouldRestart = started && Date().timeIntervalSince(lastConfigRestart) > 1
+        if shouldRestart { lastConfigRestart = Date() }
+        lock.unlock()
+        guard shouldRestart else { return }
+        Diag.log("MIC configuration change — restarting input")
+        restart()
     }
 
     /// One-shot attempt to recover an input tap that stopped delivering
@@ -111,6 +131,10 @@ final class MicCapture: @unchecked Sendable {
     func stop() {
         lock.lock(); defer { lock.unlock() }
         guard started else { return }
+        if let configObserver {
+            NotificationCenter.default.removeObserver(configObserver)
+            self.configObserver = nil
+        }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         started = false
