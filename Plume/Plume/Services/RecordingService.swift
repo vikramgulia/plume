@@ -16,6 +16,9 @@ final class RecordingService: ObservableObject {
     @Published var lastError: String?
     @Published var lastOutputURL: URL?
 
+    /// Called when capture fails mid-recording and the partial recording was saved.
+    var onUnexpectedStop: ((URL?) -> Void)?
+
     private let prefs = PreferencesStore.shared
     private var systemCapture: AnyObject?
     private var micCapture: MicCapture?
@@ -56,9 +59,17 @@ final class RecordingService: ObservableObject {
 
         capture.onError = { [weak self] err in
             Task { @MainActor in
+                guard let self else { return }
                 captureError = err
-                self?.lastError = err.localizedDescription
-                self?.failCleanup()
+                if self.state == .recording && !self.starting {
+                    // Already recording: keep what was captured instead of deleting it.
+                    let url = await self.stop()
+                    self.lastError = err.localizedDescription
+                    self.onUnexpectedStop?(url)
+                } else if self.state != .stopping {
+                    self.lastError = err.localizedDescription
+                    self.failCleanup()
+                }
             }
         }
 

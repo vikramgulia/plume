@@ -6,7 +6,7 @@ import CoreMedia
 /// In-process ScreenCaptureKit system-audio capture (no CLI). Delivers Float32
 /// mono PCM at 48 kHz, converted from the stream's native format.
 @available(macOS 13.0, *)
-final class SystemAudioCapture: NSObject, SCStreamOutput, @unchecked Sendable {
+final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
 
     /// (mono 48k Float32 PCM chunk, RMS level 0...1)
     var onPCM: ((Data, Float) -> Void)?
@@ -20,6 +20,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, @unchecked Sendable {
     private var convChannels: UInt32 = 0
     private let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: true)!
     private var bufferCount = 0
+    private var stopRequested = false
 
     func start() {
         Diag.log("SCK start requested")
@@ -59,7 +60,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, @unchecked Sendable {
             config.showsCursor = false
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
-            let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+            let stream = SCStream(filter: filter, configuration: config, delegate: self)
 
             do {
                 try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
@@ -82,9 +83,20 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, @unchecked Sendable {
     }
 
     private func stopSync() {
+        stopRequested = true
         let s = stream
         stream = nil
         s?.stopCapture { _ in }
+    }
+
+    /// The stream ended on its own (display removed, system stopped capture, ...).
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        queue.async { [weak self] in
+            guard let self, !self.stopRequested else { return }
+            Diag.log("SCK stream stopped with error: \(error.localizedDescription)")
+            self.stream = nil
+            self.onError?(error)
+        }
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
