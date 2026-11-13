@@ -14,7 +14,12 @@ sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx), Apache License 2.0
   The static libraries include ONNX Runtime and other components under their own licenses.
 
 Speaker diarization models, downloaded by scripts/fetch-sherpa.sh and bundled with release builds:
-  - pyannote segmentation 3.0 (sherpa-onnx export)
-  - NVIDIA NeMo TitaNet small speaker embedding model
-  Each model is under its own license, which may require attribution or limit use.
-  Check the current terms of both before distributing or commercializing.
+
+  pyannote segmentation 3.0 (sherpa-onnx export), MIT License
+    https://huggingface.co/pyannote/segmentation-3.0
+    MIT requires keeping the copyright notice and permission text with copies.
+    TODO: add the copyright line exactly as stated on the model card / repository.
+
+  NVIDIA NeMo TitaNet small speaker embedding model
+    https://catalog.ngc.nvidia.com/orgs/nvidia/teams/nemo/models/titanet_small
+    TODO: confirm the license and any attribution wording on that page, then record it here.
