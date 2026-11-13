@@ -23,4 +23,9 @@ DMG="$OUT/Plume-$VERSION-arm64.dmg"
 rm -f "$DMG"
 hdiutil create -volname "Plume" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"
+
+# Sign the disk image itself for release builds (see build-plume.sh); notarize with notarize-dmg.sh.
+if [[ "${PLUME_RELEASE_SIGNING:-0}" == "1" ]]; then
+  codesign --force --timestamp --sign "${PLUME_CODE_SIGN_IDENTITY:?PLUME_CODE_SIGN_IDENTITY is required}" "$DMG"
+fi
 echo "DMG: $DMG"

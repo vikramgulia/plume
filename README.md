@@ -155,7 +155,21 @@ Every push to `main` builds a DMG, available under the run's **Artifacts** in th
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
-Builds are ad-hoc signed, so on first launch right-click the app and choose **Open**. Bugs, feature ideas and to-dos are tracked as [GitHub Issues](../../issues).
+Release builds are signed with a Developer ID certificate and notarized by Apple when the signing secrets are configured (see below), so they open without a Gatekeeper warning. Builds without those secrets, such as forks, are unsigned: open them via System Settings → Privacy & Security → **Open Anyway**. Bugs, feature ideas and to-dos are tracked as [GitHub Issues](../../issues).
+
+### Signing and notarization
+
+The `package` job in `.github/workflows/ci.yml` signs and notarizes when these secrets exist in the repo's `release` environment (Settings → Environments):
+
+| Secret | Value |
+|--------|-------|
+| `MACOS_CERT_P12` | Developer ID Application certificate exported as `.p12`, base64-encoded (`base64 -i cert.p12 \| pbcopy`) |
+| `MACOS_CERT_PASSWORD` | Password of the `.p12` |
+| `APPLE_API_KEY_P8` | App Store Connect API key (`.p8`), base64-encoded |
+| `APPLE_API_KEY_ID` | The API key's ID |
+| `APPLE_API_ISSUER_ID` | The issuer ID shown on the App Store Connect Keys page |
+
+Restrict the `release` environment to the `main` branch and `v*` tags. Locally, `scripts/notarize-dmg.sh` runs the same notarization step.
 
 ## License
 
