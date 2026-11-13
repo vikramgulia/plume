@@ -40,6 +40,12 @@ Speaker diarization models, downloaded by scripts/fetch-sherpa.sh and bundled wi
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
-  NVIDIA NeMo TitaNet small speaker embedding model
-    https://catalog.ngc.nvidia.com/orgs/nvidia/teams/nemo/models/titanet_small
-    TODO: confirm the license and any attribution wording on that page, then record it here.
+  NVIDIA NeMo TitaNet small speaker embedding model, Apache License 2.0
+    https://catalog.ngc.nvidia.com/orgs/nvidia/nemo/models/titanet_small
+    NVIDIA states the model is covered by the license of the NeMo Toolkit
+    (https://github.com/NVIDIA/NeMo/blob/main/LICENSE), which is Apache 2.0.
+    Plume bundles the copy converted to ONNX by the sherpa-onnx project
+    (nemo_en_titanet_small.onnx); the model was changed only by that conversion.
+
+The Apache License 2.0 text that applies to sherpa-onnx and TitaNet small is in
+licenses/Apache-2.0.txt.
