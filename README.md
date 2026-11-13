@@ -159,4 +159,6 @@ Builds are ad-hoc signed, so on first launch right-click the app and choose **Op
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Plume is free for **noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE). You can use, modify, build on and share it, as long as you keep the copyright notice and license terms (see [NOTICE](NOTICE)) and credit this project. Commercial use is not covered by this license; open an issue to discuss it.
+
+Third-party components keep their own licenses; see [NOTICE](NOTICE).
