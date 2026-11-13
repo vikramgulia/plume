@@ -4,14 +4,12 @@ import CoreMedia
 import CoreAudio
 
 /// In-process stereo recorder: left channel = system audio, right channel = microphone.
-/// Both sources push Float32 mono 48 kHz PCM chunks; a ticker assembles fixed stereo
-/// chunks (padding a silent channel when a source has no data yet) and writes them
-/// through AVAssetWriter (M4A/AAC) or as a plain float32 PCM WAV file. A source that
-/// starts delivering late simply appears in its channel from that point on.
+/// Both sources push Float32 mono 48 kHz PCM chunks; a `StereoAligner` places them on a
+/// shared timeline by arrival time, and a ticker writes the aligned stereo through
+/// AVAssetWriter (M4A/AAC) or as a plain float32 PCM WAV file. A source that starts late
+/// or goes quiet leaves silence at the right position, so the channels stay in sync.
 final class AudioFileWriter: @unchecked Sendable {
     static let sampleRate: Double = 48000
-    private let tickFrames = 4800 // 100 ms at 48 kHz
-
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var wavHandle: FileHandle?
@@ -21,20 +19,29 @@ final class AudioFileWriter: @unchecked Sendable {
     private var format: AudioFormat = .m4a
 
     private let lock = NSLock()
-    private var sysBuffer: [Float] = []
-    private var micBuffer: [Float] = []
-    private var maxBufferedFrames = 48000 * 30
+    private var aligner = StereoAligner()
+    private let clock: () -> TimeInterval
+    private var startTime: TimeInterval = 0
+    /// How far behind real time output is written, so slightly late data can still be placed.
+    private static let latency: TimeInterval = 0.2
+    private let maxChunkFrames = 9600
 
     private let tickerQueue = DispatchQueue(label: "com.plume.writer.ticker")
     private var timer: DispatchSourceTimer?
     private var finished = false
     private var tickCount = 0
     private var appendCount = 0
-    private var dropCount = 0
+    private var deferredCount = 0
+
+    init(clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        self.clock = clock
+    }
 
     func start(format: AudioFormat, output: URL) throws {
         self.format = format
         framesWritten = 0
+        aligner = StereoAligner()
+        startTime = clock()
         Diag.log("WRITER start format=\(format.rawValue) output=\(output.lastPathComponent)")
 
         var asbd = AudioStreamBasicDescription()
@@ -72,16 +79,16 @@ final class AudioFileWriter: @unchecked Sendable {
     }
 
     func appendSystem(_ data: Data) {
-        push(data, into: &sysBuffer)
+        push(data, source: .system)
     }
 
     func appendMic(_ data: Data) {
-        push(data, into: &micBuffer)
+        push(data, source: .mic)
     }
 
     /// Flush buffered audio, finalize the file, and close.
     func finish() async throws {
-        Diag.log("WRITER finish: ticks=\(tickCount) appended=\(appendCount) dropped=\(dropCount) framesWritten=\(framesWritten)")
+        Diag.log("WRITER finish: ticks=\(tickCount) appended=\(appendCount) deferred=\(deferredCount) framesWritten=\(framesWritten)")
         tickerQueue.sync {
             timer?.cancel()
             timer = nil
@@ -90,11 +97,18 @@ final class AudioFileWriter: @unchecked Sendable {
         finished = true
         lock.unlock()
 
-        // Drain whatever both sources still have buffered.
-        for _ in 0..<100 {
-            let chunk = pullChunk()
-            if chunk == nil { break }
-            writeStereo(chunk!)
+        // Drain whatever both sources still have buffered, waiting out encoder back-pressure.
+        while let chunk = nextChunk(draining: true) {
+            var attempts = 0
+            while !writeStereo(chunk) && attempts < 1000 {
+                attempts += 1
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+            if attempts >= 1000 {
+                Diag.log("WRITER finish: encoder never became ready, dropping remaining audio")
+                break
+            }
+            commit(chunk)
         }
 
         switch format {
@@ -130,73 +144,57 @@ final class AudioFileWriter: @unchecked Sendable {
 
     // MARK: - Internals
 
-    private func push(_ data: Data, into buffer: inout [Float]) {
+    private func push(_ data: Data, source: StereoAligner.Source) {
         let floats = data.withUnsafeBytes { raw -> [Float] in
             Array(raw.bindMemory(to: Float.self))
         }
         guard !floats.isEmpty else { return }
         lock.lock()
-        guard !finished else {
-            lock.unlock()
-            return
-        }
-        buffer.append(contentsOf: floats)
-        if buffer.count > maxBufferedFrames {
-            buffer.removeFirst(buffer.count - maxBufferedFrames)
-        }
-        lock.unlock()
+        defer { lock.unlock() }
+        guard !finished else { return }
+        aligner.push(floats, source: source, at: clock() - startTime)
     }
 
-    /// Pull up to one tick's worth of frames from both sources and interleave them
-    /// into stereo (L = system, R = mic). Missing frames become silence.
-    /// Returns nil when both sources are empty.
-    private func pullChunk() -> [Float]? {
-        var sys: [Float] = []
-        var mic: [Float] = []
+    /// The next chunk of aligned stereo (L = system, R = mic) that is due, without consuming it.
+    private func nextChunk(draining: Bool) -> [Float]? {
         lock.lock()
-        if !sysBuffer.isEmpty || !micBuffer.isEmpty {
-            sys = Array(sysBuffer.prefix(tickFrames))
-            sysBuffer.removeFirst(min(sysBuffer.count, tickFrames))
-            mic = Array(micBuffer.prefix(tickFrames))
-            micBuffer.removeFirst(min(micBuffer.count, tickFrames))
-        }
-        lock.unlock()
-        if sys.isEmpty && mic.isEmpty { return nil }
+        defer { lock.unlock() }
+        if draining { return aligner.peekAll(maxFrames: maxChunkFrames) }
+        return aligner.peek(upTo: clock() - startTime, latency: Self.latency, maxFrames: maxChunkFrames)
+    }
 
-        var stereo = [Float](repeating: 0, count: tickFrames * 2)
-        for f in 0..<tickFrames {
-            if f < sys.count { stereo[f * 2] = sys[f] }
-            if f < mic.count { stereo[f * 2 + 1] = mic[f] }
-        }
-        return stereo
+    private func commit(_ chunk: [Float]) {
+        lock.lock()
+        aligner.commit(frames: chunk.count / 2)
+        lock.unlock()
     }
 
     private func tick() {
         tickCount += 1
         if tickCount % 100 == 0 {
             lock.lock()
-            let sysDepth = sysBuffer.count
-            let micDepth = micBuffer.count
+            let pending = aligner.pendingFrames
             lock.unlock()
-            Diag.log("WRITER tick #\(tickCount) appended=\(appendCount) dropped=\(dropCount) sysPending=\(sysDepth) micPending=\(micDepth)")
+            Diag.log("WRITER tick #\(tickCount) appended=\(appendCount) deferred=\(deferredCount) pendingFrames=\(pending)")
         }
-        guard let chunk = pullChunk() else { return }
-        writeStereo(chunk)
+        guard let chunk = nextChunk(draining: false) else { return }
+        if writeStereo(chunk) { commit(chunk) }
     }
 
-    private func writeStereo(_ stereo: [Float]) {
+    /// Returns false when the encoder is not ready; the chunk is kept and retried.
+    private func writeStereo(_ stereo: [Float]) -> Bool {
         switch format {
-        case .m4a: appendToAssetWriter(stereo)
-        case .wav: appendToWav(stereo)
+        case .m4a: return appendToAssetWriter(stereo)
+        case .wav: return appendToWav(stereo)
         }
     }
 
-    private func appendToAssetWriter(_ stereo: [Float]) {
-        guard let input, let fd = pcmFormatDescription else { return }
-        // Drop under encoder back-pressure; PTS only advances on successful append.
+    private func appendToAssetWriter(_ stereo: [Float]) -> Bool {
+        guard let input, let fd = pcmFormatDescription else { return true }
+        // Under encoder back-pressure keep the chunk and retry; PTS only advances on a successful append.
         guard input.isReadyForMoreMediaData else {
-            dropCount += 1
-            return
+            deferredCount += 1
+            return false
         }
 
         let frames = stereo.count / 2
@@ -204,7 +202,7 @@ final class AudioFileWriter: @unchecked Sendable {
 
         // Provide our own memory block: with a NULL memory block the data region is
         // never materialized and GetDataPointer fails, silently dropping every chunk.
-        guard let mem = malloc(bytes) else { return }
+        guard let mem = malloc(bytes) else { return true }
         stereo.withUnsafeBytes { raw in
             if let base = raw.baseAddress {
                 memcpy(mem, base, bytes)
@@ -224,7 +222,7 @@ final class AudioFileWriter: @unchecked Sendable {
         )
         guard status == kCMBlockBufferNoErr, let block else {
             free(mem)
-            return
+            return true
         }
 
         var timing = CMSampleTimingInfo(
@@ -249,15 +247,15 @@ final class AudioFileWriter: @unchecked Sendable {
         )
         guard ok == noErr, let sb else {
             Diag.log("WRITER CMSampleBufferCreate failed at tick #\(tickCount)")
-            return
+            return true
         }
         if input.append(sb) {
             framesWritten += Int64(frames)
             appendCount += 1
         } else {
-            dropCount += 1
             Diag.log("WRITER append returned false at tick #\(tickCount)")
         }
+        return true
     }
 
     // MARK: - M4A
@@ -297,8 +295,8 @@ final class AudioFileWriter: @unchecked Sendable {
         try h.write(contentsOf: Self.wavHeader(dataBytes: 0))
     }
 
-    private func appendToWav(_ stereo: [Float]) {
-        guard let h = wavHandle else { return }
+    private func appendToWav(_ stereo: [Float]) -> Bool {
+        guard let h = wavHandle else { return true }
         let data = stereo.withUnsafeBufferPointer { Data(buffer: $0) }
         do {
             try h.write(contentsOf: data)
@@ -306,6 +304,7 @@ final class AudioFileWriter: @unchecked Sendable {
         } catch {
             // disk full or file gone; nothing useful to do
         }
+        return true
     }
 
     static func wavHeader(dataBytes: Int) -> Data {
