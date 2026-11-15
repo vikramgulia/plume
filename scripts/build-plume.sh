@@ -68,6 +68,11 @@ xcodebuild \
 APP="$DERIVED/Build/Products/$CONFIG/Plume.app"
 RES="$APP/Contents/Resources"
 
+# Ship the license and third-party notices inside the app (they must travel with copies).
+mkdir -p "$RES/Licenses"
+cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$RES/Licenses/"
+cp "$ROOT"/licenses/*.txt "$RES/Licenses/"
+
 # Bundle the diarization models when present (fetch with scripts/fetch-sherpa.sh)
 MODEL_SRC="$ROOT/extraResources/diarization-models"
 if [[ -f "$MODEL_SRC/segmentation.onnx" ]]; then
