@@ -40,6 +40,10 @@ struct PlumeApp: App {
                     }
                 }
             }
+            Button("Start Voice Note") {
+                Task { await appState.startVoiceNote() }
+            }
+            .disabled(appState.recording.state != .idle)
             Divider()
             Menu("Recent Recordings") {
                 ForEach(Array(appState.library.recordings.prefix(5))) { rec in

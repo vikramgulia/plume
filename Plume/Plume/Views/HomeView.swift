@@ -9,7 +9,9 @@ struct HomeView: View {
                 Text("Plume")
                     .font(.title3.weight(.semibold))
                 Spacer()
-                Text(app.recording.state == .recording ? "● Recording" : "Idle")
+                Text(app.recording.state == .recording
+                     ? (app.recording.mode == .voiceNote ? "● Voice note" : "● Recording")
+                     : "Idle")
                     .font(.caption.weight(.medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -57,12 +59,23 @@ struct HomeView: View {
                 Text(formatElapsed(app.recording.elapsed))
                     .font(.system(.title2, design: .monospaced))
                     .padding(.top, 8)
+            } else {
+                Button {
+                    Task { await app.startVoiceNote() }
+                } label: {
+                    Label("Record voice note", systemImage: "mic")
+                }
+                .buttonStyle(.bordered)
+                .disabled(app.recording.state != .idle)
+                .help("Record only your microphone. No Screen Recording permission needed.")
             }
 
             Spacer()
 
             VStack(spacing: 10) {
-                LevelMeter(label: "System", level: app.recording.systemLevel)
+                if app.recording.mode != .voiceNote || app.recording.state == .idle {
+                    LevelMeter(label: "System", level: app.recording.systemLevel)
+                }
                 LevelMeter(label: "Mic", level: app.recording.micLevel)
             }
 

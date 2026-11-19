@@ -97,6 +97,19 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Records the microphone only (no system audio, no Screen Recording permission).
+    func startVoiceNote() async {
+        guard await permissions.requestMicrophone() else {
+            showToast("Microphone permission required")
+            permissions.openMicrophoneSettings()
+            return
+        }
+        await recording.start(withMicrophone: true, mode: .voiceNote)
+        if let err = recording.lastError {
+            showToast(err)
+        }
+    }
+
     func stopRecording() async {
         let url = await recording.stop()
         await finishRecording(url)
