@@ -9,6 +9,7 @@ Built with SwiftUI and Apple's ScreenCaptureKit. No virtual audio drivers needed
 ## Features
 
 - Record system audio + microphone into a single M4A or WAV file
+- Voice notes: record just your microphone (no Screen Recording permission needed)
 - Menu bar controls and a floating recording pill
 - Recordings library with playback, rename and delete
 - On-device transcription (Apple Speech framework), optionally automatic when a recording stops

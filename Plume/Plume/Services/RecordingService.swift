@@ -7,6 +7,21 @@ enum RecordingState: String {
     case stopping
 }
 
+/// What a recording captures.
+enum RecordingMode: Equatable {
+    /// System audio on the left channel, microphone on the right.
+    case systemAndMic
+    /// Microphone only (right channel), no system audio and no Screen Recording permission.
+    case voiceNote
+
+    var filePrefix: String {
+        switch self {
+        case .systemAndMic: return "Recording"
+        case .voiceNote: return "Voice note"
+        }
+    }
+}
+
 @MainActor
 final class RecordingService: ObservableObject {
     @Published var state: RecordingState = .idle
@@ -15,6 +30,7 @@ final class RecordingService: ObservableObject {
     @Published var micLevel: Float = 0
     @Published var lastError: String?
     @Published var lastOutputURL: URL?
+    @Published private(set) var mode: RecordingMode = .systemAndMic
 
     /// Non-fatal problems while recording (for example the microphone stopped).
     var onNotice: ((String) -> Void)?
@@ -34,24 +50,30 @@ final class RecordingService: ObservableObject {
     private var stopRequestedDuringStart = false
     private var receivedSystemAudio = false
 
-    func start(withMicrophone: Bool) async {
+    func start(withMicrophone: Bool, mode: RecordingMode = .systemAndMic) async {
         guard state == .idle, !starting else { return }
         starting = true
         defer { starting = false }
         lastError = nil
         stopRequestedDuringStart = false
         receivedSystemAudio = false
-        withMic = withMicrophone
+        withMic = withMicrophone || mode == .voiceNote
+        self.mode = mode
 
         let folder = prefs.saveFolder
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let stamp = Self.timestamp()
         let ext = prefs.format.fileExtension
-        let url = folder.appendingPathComponent("Recording \(stamp).\(ext)")
+        let url = folder.appendingPathComponent("\(mode.filePrefix) \(stamp).\(ext)")
         outputURL = url
 
         guard #available(macOS 13.0, *) else {
             lastError = "Plume requires macOS 13 or later"
+            return
+        }
+
+        if mode == .voiceNote {
+            startVoiceNote(to: url)
             return
         }
 
@@ -138,6 +160,37 @@ final class RecordingService: ObservableObject {
         }
     }
 
+    /// Microphone only: no ScreenCaptureKit, so no Screen Recording permission is needed.
+    /// The writer pads the silent system channel, so the file is stereo with the mic on the right.
+    private func startVoiceNote(to url: URL) {
+        let mic = MicCapture()
+        micCapture = mic
+        mic.onError = { [weak self] err in
+            Task { @MainActor in
+                guard let self, self.state == .recording, !self.starting else { return }
+                // Keep what was captured, as for a system-audio failure.
+                let url = await self.stop()
+                self.lastError = "Microphone stopped (\(err.localizedDescription))."
+                self.onUnexpectedStop?(url)
+            }
+        }
+        mic.onPCM = { [weak self] data, level in
+            Task { @MainActor in
+                guard let self else { return }
+                self.micLevel = level
+                self.writer?.appendMic(data)
+            }
+        }
+        do {
+            try mic.start()
+        } catch {
+            lastError = "Microphone unavailable: \(error.localizedDescription)"
+            failCleanup()
+            return
+        }
+        beginRecording(to: url)
+    }
+
     /// Creates the writer and flips the UI to recording. Safe to call more than once.
     private func beginRecording(to url: URL) {
         guard writer == nil, state == .idle, starting, url == outputURL else { return }
@@ -167,7 +220,7 @@ final class RecordingService: ObservableObject {
         }
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 10_000_000_000)
-            guard let self, self.state == .recording, !self.receivedSystemAudio else { return }
+            guard let self, self.state == .recording, self.mode == .systemAndMic, !self.receivedSystemAudio else { return }
             Diag.log("REC no system audio received after 10s (nothing playing, or capture is silent)")
         }
     }
