@@ -10,6 +10,7 @@ final class AppState: ObservableObject {
     let library = RecordingLibrary()
     let permissions = PermissionsService()
     let transcription = TranscriptionService()
+    let hotKeys = GlobalHotKeyService()
 
     @Published var selectedTab: Tab = .home
     @Published var toast: String?
@@ -35,6 +36,16 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         transcription.objectWillChange.receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+
+        hotKeys.onAction = { [weak self] action in
+            Task { @MainActor in await self?.handleHotKey(action) }
+        }
+        preferences.$toggleRecordingShortcut
+            .sink { [weak self] shortcut in self?.applyShortcut(shortcut, for: .toggleRecording) }
+            .store(in: &cancellables)
+        preferences.$voiceNoteShortcut
+            .sink { [weak self] shortcut in self?.applyShortcut(shortcut, for: .voiceNote) }
+            .store(in: &cancellables)
 
         recording.onNotice = { [weak self] message in
             Task { @MainActor in self?.showToast(message) }
@@ -93,6 +104,29 @@ final class AppState: ObservableObject {
                 waited += 1
             }
         case .idle:
+            break
+        }
+    }
+
+    private func applyShortcut(_ shortcut: Shortcut?, for action: HotKeyAction) {
+        if !hotKeys.set(shortcut, for: action), let shortcut {
+            showToast("\(shortcut.displayString) is already in use. Pick another shortcut in Settings.")
+        }
+    }
+
+    /// A global shortcut stops whatever is recording, or starts the recording it is bound to.
+    private func handleHotKey(_ action: HotKeyAction) async {
+        switch recording.state {
+        case .recording:
+            await stopRecording()
+            NSSound(named: "Pop")?.play()
+        case .idle:
+            switch action {
+            case .toggleRecording: await startRecording()
+            case .voiceNote: await startVoiceNote()
+            }
+            if recording.state == .recording { NSSound(named: "Tink")?.play() }
+        case .stopping:
             break
         }
     }
