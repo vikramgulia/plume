@@ -30,6 +30,8 @@ final class PreferencesStore: ObservableObject {
         static let autoTranscribe = "autoTranscribe"
         static let transcriptionLanguage = "transcriptionLanguage"
         static let theme = "theme"
+        static let toggleRecordingShortcut = "toggleRecordingShortcut"
+        static let voiceNoteShortcut = "voiceNoteShortcut"
         static let pillPositionX = "pillPositionX"
         static let pillPositionY = "pillPositionY"
     }
@@ -57,6 +59,14 @@ final class PreferencesStore: ObservableObject {
     }
     @Published var theme: AppTheme {
         didSet { defaults.set(theme.rawValue, forKey: Key.theme) }
+    }
+    /// Global shortcut that starts or stops a recording (nil = off).
+    @Published var toggleRecordingShortcut: Shortcut? {
+        didSet { Self.save(toggleRecordingShortcut, to: defaults, key: Key.toggleRecordingShortcut) }
+    }
+    /// Global shortcut that starts or stops a voice note (nil = off).
+    @Published var voiceNoteShortcut: Shortcut? {
+        didSet { Self.save(voiceNoteShortcut, to: defaults, key: Key.voiceNoteShortcut) }
     }
     @Published var pillPosition: CGPoint? {
         didSet {
@@ -87,6 +97,9 @@ final class PreferencesStore: ObservableObject {
         autoTranscribe = defaults.bool(forKey: Key.autoTranscribe)
         transcriptionLanguage = defaults.string(forKey: Key.transcriptionLanguage) ?? "en-US"
         theme = AppTheme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .system
+        toggleRecordingShortcut = Self.loadShortcut(from: defaults, key: Key.toggleRecordingShortcut,
+                                                    fallback: .defaultToggleRecording)
+        voiceNoteShortcut = Self.loadShortcut(from: defaults, key: Key.voiceNoteShortcut, fallback: nil)
 
         if defaults.object(forKey: Key.pillPositionX) != nil {
             pillPosition = CGPoint(
@@ -98,6 +111,23 @@ final class PreferencesStore: ObservableObject {
         }
 
         try? FileManager.default.createDirectory(at: saveFolder, withIntermediateDirectories: true)
+    }
+
+    /// A missing key means "never set" (use the fallback); the string "none" means switched off.
+    private static func loadShortcut(from defaults: UserDefaults, key: String, fallback: Shortcut?) -> Shortcut? {
+        guard let stored = defaults.object(forKey: key) else { return fallback }
+        guard let data = stored as? Data,
+              let shortcut = try? JSONDecoder().decode(Shortcut.self, from: data),
+              shortcut.isValid else { return nil }
+        return shortcut
+    }
+
+    private static func save(_ shortcut: Shortcut?, to defaults: UserDefaults, key: String) {
+        if let shortcut, let data = try? JSONEncoder().encode(shortcut) {
+            defaults.set(data, forKey: key)
+        } else {
+            defaults.set("none", forKey: key)
+        }
     }
 
     var resolvedColorScheme: ColorSchemePreference {

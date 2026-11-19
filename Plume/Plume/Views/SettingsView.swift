@@ -98,6 +98,16 @@ struct SettingsView: View {
                     }
                 }
 
+                group("Shortcuts") {
+                    row("Start / Stop Recording", "Works from any app") {
+                        ShortcutRecorder(shortcut: $prefs.toggleRecordingShortcut, other: prefs.voiceNoteShortcut)
+                    }
+                    Divider()
+                    row("Voice Note", "Start / stop a microphone-only note") {
+                        ShortcutRecorder(shortcut: $prefs.voiceNoteShortcut, other: prefs.toggleRecordingShortcut)
+                    }
+                }
+
                 group("Permissions") {
                     HStack {
                         VStack(alignment: .leading) {
