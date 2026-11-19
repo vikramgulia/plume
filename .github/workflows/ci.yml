@@ -134,6 +134,10 @@ jobs:
           name: Plume-${{ steps.version.outputs.value }}-dmg
           path: dist/*.dmg
           if-no-files-found: error
+      - name: Add the permanent download name
+        if: startsWith(github.ref, 'refs/tags/v')
+        # The stapled notarization ticket travels with the file, so the copy is just as valid.
+        run: cp dist/Plume-*.dmg dist/Plume.dmg
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3

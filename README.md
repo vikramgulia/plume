@@ -156,7 +156,7 @@ Every push to `main` builds a DMG, available under the run's **Artifacts** in th
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
-Release builds are signed with a Developer ID certificate and notarized by Apple when the signing secrets are configured (see below), so they open without a Gatekeeper warning. Builds without those secrets, such as forks, are unsigned: open them via System Settings → Privacy & Security → **Open Anyway**. Bugs, feature ideas and to-dos are tracked as [GitHub Issues](../../issues).
+Each release attaches the DMG twice: as `Plume-<version>-arm64.dmg` and as `Plume.dmg`, so [this link](https://github.com/vikramgulia/plume/releases/latest/download/Plume.dmg) always downloads the latest version. Release builds are signed with a Developer ID certificate and notarized by Apple when the signing secrets are configured (see below), so they open without a Gatekeeper warning. Builds without those secrets, such as forks, are unsigned: open them via System Settings → Privacy & Security → **Open Anyway**. Bugs, feature ideas and to-dos are tracked as [GitHub Issues](../../issues).
 
 ### Signing and notarization
 
