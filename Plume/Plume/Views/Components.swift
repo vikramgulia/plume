@@ -74,3 +74,11 @@ func formatBytes(_ n: Int64) -> String {
     if mb < 1 { return String(format: "%.0f KB", Double(n) / 1024) }
     return String(format: "%.1f MB", mb)
 }
+
+
+extension View {
+    /// Keeps a screen at a comfortable width, centered, when the window is resized wide.
+    func readableWidth(_ maxWidth: CGFloat = 560) -> some View {
+        frame(maxWidth: maxWidth).frame(maxWidth: .infinity)
+    }
+}

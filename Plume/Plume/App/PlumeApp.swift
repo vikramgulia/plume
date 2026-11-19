@@ -12,8 +12,7 @@ struct PlumeApp: App {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(prefs)
-                .frame(minWidth: 400, idealWidth: 400, maxWidth: 440,
-                       minHeight: 560, idealHeight: 560, maxHeight: 720)
+                .frame(minWidth: 400, idealWidth: 400, minHeight: 560, idealHeight: 560)
                 .preferredColorScheme(colorScheme)
                 .onAppear {
                     appDelegate.appState = appState
@@ -109,9 +108,9 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             // macOS 26 renders these tabs as Liquid Glass segments in the window toolbar.
             TabView(selection: $app.selectedTab) {
-                Tab("Home", systemImage: "mic.fill", value: AppState.Tab.home) { HomeView() }
+                Tab("Home", systemImage: "mic.fill", value: AppState.Tab.home) { HomeView().readableWidth() }
                 Tab("Recordings", systemImage: "list.bullet", value: AppState.Tab.recordings) { RecordingsView() }
-                Tab("Settings", systemImage: "gearshape", value: AppState.Tab.settings) { SettingsView() }
+                Tab("Settings", systemImage: "gearshape", value: AppState.Tab.settings) { SettingsView().readableWidth() }
             }
 
             if let toast = app.toast {
