@@ -172,6 +172,10 @@ The `package` job in `.github/workflows/ci.yml` signs and notarizes when these s
 
 Restrict the `release` environment to the `main` branch and `v*` tags. Locally, `scripts/notarize-dmg.sh` runs the same notarization step.
 
+## Contributing and security
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). To report a security or privacy problem privately, see [SECURITY.md](SECURITY.md).
+
 ## License
 
 Plume is free for **noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE). You can use, modify, build on and share it, as long as you keep the copyright notice and license terms (see [NOTICE](NOTICE)) and credit this project. Commercial use is not covered by this license; open an issue to discuss it.
