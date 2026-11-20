@@ -127,10 +127,7 @@ struct SettingsView: View {
                         }
                         Spacer()
                         Button("Request") {
-                            Task {
-                                let ok = await app.permissions.requestMicrophone()
-                                if !ok { app.permissions.openMicrophoneSettings() }
-                            }
+                            Task { await app.permissions.requestMicrophoneOrOpenSettings() }
                         }
                     }
                 }
@@ -183,6 +180,9 @@ struct SettingsView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
             .padding(.top, 8)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await app.permissions.refresh() }
         }
         .task {
             await app.permissions.refresh()

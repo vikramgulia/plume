@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct HomeView: View {
     @EnvironmentObject var app: AppState
@@ -88,7 +89,7 @@ struct HomeView: View {
                 PermissionRow(
                     ok: app.permissions.micGranted,
                     label: "Microphone",
-                    action: { app.permissions.openMicrophoneSettings() }
+                    action: { Task { await app.permissions.requestMicrophoneOrOpenSettings() } }
                 )
             }
         }
@@ -96,5 +97,9 @@ struct HomeView: View {
         .padding(.bottom, 20)
         .padding(.top, 8)
         .task { await app.permissions.refresh() }
+        // Pick up a change made in System Settings as soon as the user comes back to Plume.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await app.permissions.refresh() }
+        }
     }
 }
