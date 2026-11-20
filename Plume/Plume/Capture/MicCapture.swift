@@ -12,7 +12,12 @@ final class MicCapture: @unchecked Sendable {
     private var delivered = false
     private var bufferCount = 0
     private var configObserver: NSObjectProtocol?
-    private var lastConfigRestart = Date.distantPast
+    private var pendingRestart: DispatchWorkItem?
+    private var recentRestarts: [Date] = []
+    private let restartQueue = DispatchQueue(label: "com.plume.mic.restart")
+
+    /// A microphone chosen in Settings (its UID), or nil to choose automatically.
+    var preferredDeviceUID: String?
 
     /// Whether the input tap has produced at least one buffer.
     var hasDeliveredFrames: Bool {
@@ -29,6 +34,15 @@ final class MicCapture: @unchecked Sendable {
         }
 
         let input = engine.inputNode
+        // Pick the microphone first: opening a Bluetooth headset's mic switches it to the
+        // hands-free profile, which silences what is playing in it. Use the Mac's own mic instead.
+        if let device = AudioDevices.chooseInput(preferredUID: preferredDeviceUID) {
+            if device.id != AudioDevices.defaultInputID() {
+                do { try input.auAudioUnit.setDeviceID(device.id) }
+                catch { Diag.log("MIC could not select \(device.name): \(error.localizedDescription)") }
+            }
+            Diag.log("MIC input device: \(device.name) bluetooth=\(device.isBluetooth) builtIn=\(device.isBuiltIn)")
+        }
         let hwFormat = input.inputFormat(forBus: 0)
         guard hwFormat.sampleRate > 0 else {
             throw NSError(domain: "Plume", code: 11, userInfo: [NSLocalizedDescriptionKey: "No microphone input"])
@@ -100,13 +114,34 @@ final class MicCapture: @unchecked Sendable {
         }
     }
 
+    /// Device changes arrive in bursts (a Bluetooth headset can change profile several times), and
+    /// restarting on each one keeps reopening the input, which stops the headset settling. Wait until
+    /// the changes stop, restart once, and give up after a few rounds.
     private func handleConfigurationChange() {
         lock.lock()
-        let shouldRestart = started && Date().timeIntervalSince(lastConfigRestart) > 1
-        if shouldRestart { lastConfigRestart = Date() }
+        guard started else { lock.unlock(); return }
+        pendingRestart?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.restartAfterDeviceChange() }
+        pendingRestart = item
         lock.unlock()
-        guard shouldRestart else { return }
-        Diag.log("MIC configuration change — restarting input")
+        restartQueue.asyncAfter(deadline: .now() + 0.7, execute: item)
+    }
+
+    private func restartAfterDeviceChange() {
+        lock.lock()
+        let now = Date()
+        recentRestarts = recentRestarts.filter { now.timeIntervalSince($0) < 15 }
+        let allowed = started && recentRestarts.count < 3
+        if allowed { recentRestarts.append(now) }
+        let gaveUp = started && !allowed
+        lock.unlock()
+        if gaveUp {
+            Diag.log("MIC device keeps changing — not restarting again")
+            onError?(NSError(domain: "Plume", code: 12, userInfo: [NSLocalizedDescriptionKey: "the audio device keeps changing"]))
+            return
+        }
+        guard allowed else { return }
+        Diag.log("MIC input settled after a device change — restarting")
         restart()
     }
 
@@ -131,6 +166,8 @@ final class MicCapture: @unchecked Sendable {
     func stop() {
         lock.lock(); defer { lock.unlock() }
         guard started else { return }
+        pendingRestart?.cancel()
+        pendingRestart = nil
         if let configObserver {
             NotificationCenter.default.removeObserver(configObserver)
             self.configObserver = nil

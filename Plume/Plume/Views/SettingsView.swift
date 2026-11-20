@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var installError: String?
     @State private var samplePlayer: AVAudioPlayer?
     @State private var playingID: UUID?
+    @State private var inputDevices: [AudioInputDevice] = []
 
     var body: some View {
         ScrollView {
@@ -95,6 +96,27 @@ struct SettingsView: View {
                         }
                         .labelsHidden()
                         .frame(width: 120)
+                    }
+                }
+
+                group("Microphone") {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Input")
+                            Text("Automatic uses your Mac's own microphone when Bluetooth headphones are connected, so they keep playing sound")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                        }
+                        Spacer()
+                        Picker("", selection: $prefs.microphoneDeviceUID) {
+                            Text("Automatic").tag(String?.none)
+                            ForEach(inputDevices) { device in
+                                Text(device.name).tag(Optional(device.uid))
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
                     }
                 }
 
@@ -186,6 +208,7 @@ struct SettingsView: View {
         }
         .task {
             await app.permissions.refresh()
+            inputDevices = AudioDevices.inputDevices()
             languages = await app.transcription.supportedLocales()
             await refreshAssets()
         }
