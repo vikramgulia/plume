@@ -80,6 +80,7 @@ final class RecordingService: ObservableObject {
         let capture = SystemAudioCapture()
         systemCapture = capture
         let mic = MicCapture()
+        mic.preferredDeviceUID = prefs.microphoneDeviceUID
         micCapture = mic
 
         var captureError: Error?
@@ -164,6 +165,7 @@ final class RecordingService: ObservableObject {
     /// The writer pads the silent system channel, so the file is stereo with the mic on the right.
     private func startVoiceNote(to url: URL) {
         let mic = MicCapture()
+        mic.preferredDeviceUID = prefs.microphoneDeviceUID
         micCapture = mic
         mic.onError = { [weak self] err in
             Task { @MainActor in

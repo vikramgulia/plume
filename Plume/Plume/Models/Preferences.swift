@@ -30,6 +30,7 @@ final class PreferencesStore: ObservableObject {
         static let autoTranscribe = "autoTranscribe"
         static let transcriptionLanguage = "transcriptionLanguage"
         static let theme = "theme"
+        static let microphoneDeviceUID = "microphoneDeviceUID"
         static let toggleRecordingShortcut = "toggleRecordingShortcut"
         static let voiceNoteShortcut = "voiceNoteShortcut"
         static let pillPositionX = "pillPositionX"
@@ -59,6 +60,16 @@ final class PreferencesStore: ObservableObject {
     }
     @Published var theme: AppTheme {
         didSet { defaults.set(theme.rawValue, forKey: Key.theme) }
+    }
+    /// UID of the microphone chosen in Settings (nil = automatic).
+    @Published var microphoneDeviceUID: String? {
+        didSet {
+            if let uid = microphoneDeviceUID {
+                defaults.set(uid, forKey: Key.microphoneDeviceUID)
+            } else {
+                defaults.removeObject(forKey: Key.microphoneDeviceUID)
+            }
+        }
     }
     /// Global shortcut that starts or stops a recording (nil = off).
     @Published var toggleRecordingShortcut: Shortcut? {
@@ -97,6 +108,7 @@ final class PreferencesStore: ObservableObject {
         autoTranscribe = defaults.bool(forKey: Key.autoTranscribe)
         transcriptionLanguage = defaults.string(forKey: Key.transcriptionLanguage) ?? "en-US"
         theme = AppTheme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .system
+        microphoneDeviceUID = defaults.string(forKey: Key.microphoneDeviceUID)
         toggleRecordingShortcut = Self.loadShortcut(from: defaults, key: Key.toggleRecordingShortcut,
                                                     fallback: .defaultToggleRecording)
         voiceNoteShortcut = Self.loadShortcut(from: defaults, key: Key.voiceNoteShortcut, fallback: nil)
