@@ -14,6 +14,7 @@ Built with SwiftUI and Apple's ScreenCaptureKit. No virtual audio drivers needed
 - Recordings library with playback, rename and delete
 - On-device transcription (Apple Speech framework), optionally automatic when a recording stops
 - Speaker labels in transcripts, with voices remembered across recordings (on-device)
+- Export transcripts as plain text, Markdown, or SRT/VTT subtitles
 - Themes: system / light / dark
 
 ## Privacy
