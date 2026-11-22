@@ -8,7 +8,7 @@ struct SettingsView: View {
     @EnvironmentObject var prefs: PreferencesStore
     @ObservedObject private var speakers = SpeakerLibrary.shared
     @State private var languages: [Locale] = []
-    @State private var assetStatus: AssetInventory.Status?
+    @State private var assetStatus: EngineAssetStatus?
     @State private var installing = false
     @State private var installError: String?
     @State private var samplePlayer: AVAudioPlayer?
@@ -60,7 +60,7 @@ struct SettingsView: View {
                     Text(assetStatusText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    if assetStatus == .supported {
+                    if assetStatus == .needsDownload {
                         Button(installing ? "Installing…" : "Install language assets") {
                             Task { await installAssets() }
                         }
@@ -216,12 +216,11 @@ struct SettingsView: View {
 
     private var assetStatusText: String {
         switch assetStatus {
-        case .installed: return "Installed — ready to transcribe on this Mac"
-        case .supported: return "Not installed yet — install before first transcription"
+        case .ready: return "Installed — ready to transcribe on this Mac"
+        case .needsDownload: return "Not installed yet — install before first transcription"
         case .downloading: return "Downloading…"
         case .unsupported: return "Unsupported on this Mac"
         case nil: return "Checking…"
-        @unknown default: return "Checking…"
         }
     }
 
