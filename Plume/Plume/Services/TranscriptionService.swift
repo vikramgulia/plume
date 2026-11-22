@@ -70,8 +70,13 @@ final class TranscriptionService: ObservableObject {
     private let prefs = PreferencesStore.shared
     private let engine: TranscriptionEngine
 
-    init(engine: TranscriptionEngine = AppleSpeechEngine()) {
+    init(engine: TranscriptionEngine) {
         self.engine = engine
+    }
+
+    /// The app's engine: Apple's on-device speech recognition.
+    convenience init() {
+        self.init(engine: AppleSpeechEngine())
     }
 
     // MARK: Job status
