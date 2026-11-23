@@ -3,13 +3,18 @@ import XCTest
 
 @MainActor
 private final class FakeEngine: TranscriptionEngine {
-    let id = "fake"
+    let id: String
     let displayName = "Fake"
     let runsOnDevice = true
     var isAvailable = true
-    var locales = [Locale(identifier: "en-US"), Locale(identifier: "de-DE")]
+    var locales: [Locale]
     var status = EngineAssetStatus.needsDownload
     private(set) var installed: [Locale] = []
+
+    init(id: String = "fake", locales: [String] = ["en-US", "de-DE"]) {
+        self.id = id
+        self.locales = locales.map { Locale(identifier: $0) }
+    }
 
     func supportedLocales() async -> [Locale] { locales }
     func resolveLocale(_ identifier: String) async -> Locale? {
@@ -27,15 +32,52 @@ private final class FakeEngine: TranscriptionEngine {
 @MainActor
 final class TranscriptionEngineTests: XCTestCase {
     private var savedLanguage = ""
+    private var savedEngine = ""
 
     override func setUp() {
         super.setUp()
         savedLanguage = PreferencesStore.shared.transcriptionLanguage
+        savedEngine = PreferencesStore.shared.transcriptionEngineID
     }
 
     override func tearDown() {
         PreferencesStore.shared.transcriptionLanguage = savedLanguage
+        PreferencesStore.shared.transcriptionEngineID = savedEngine
         super.tearDown()
+    }
+
+    func testServiceUsesTheChosenEngineWhenItIsAvailable() async {
+        let service = TranscriptionService(
+            engine: FakeEngine(id: "apple", locales: ["en-US"]),
+            alternatives: [FakeEngine(id: "whisper", locales: ["en", "fr"])])
+        PreferencesStore.shared.transcriptionEngineID = "whisper"
+        let locales = await service.supportedLocales()
+        XCTAssertEqual(locales.map(\.identifier), ["en", "fr"])
+    }
+
+    func testServiceFallsBackToTheMainEngineWhenTheChosenOneIsNotReady() async {
+        let whisper = FakeEngine(id: "whisper", locales: ["en", "fr"])
+        whisper.isAvailable = false
+        let service = TranscriptionService(engine: FakeEngine(id: "apple", locales: ["en-US"]), alternatives: [whisper])
+        PreferencesStore.shared.transcriptionEngineID = "whisper"
+        let locales = await service.supportedLocales()
+        XCTAssertEqual(locales.map(\.identifier), ["en-US"])
+    }
+
+    func testServiceUsesTheMainEngineWhenAppleIsChosen() async {
+        let service = TranscriptionService(
+            engine: FakeEngine(id: "apple", locales: ["en-US"]),
+            alternatives: [FakeEngine(id: "whisper", locales: ["en", "fr"])])
+        PreferencesStore.shared.transcriptionEngineID = "apple"
+        let locales = await service.supportedLocales()
+        XCTAssertEqual(locales.map(\.identifier), ["en-US"])
+    }
+
+    func testAnUnknownEngineIdFallsBackToTheMainEngine() async {
+        let service = TranscriptionService(engine: FakeEngine(id: "apple", locales: ["en-US"]))
+        PreferencesStore.shared.transcriptionEngineID = "does-not-exist"
+        let locales = await service.supportedLocales()
+        XCTAssertEqual(locales.map(\.identifier), ["en-US"])
     }
 
     func testServiceListsTheEnginesLanguages() async {

@@ -31,6 +31,8 @@ final class PreferencesStore: ObservableObject {
         static let transcriptionLanguage = "transcriptionLanguage"
         static let theme = "theme"
         static let microphoneDeviceUID = "microphoneDeviceUID"
+        static let transcriptionEngineID = "transcriptionEngineID"
+        static let whisperModelID = "whisperModelID"
         static let toggleRecordingShortcut = "toggleRecordingShortcut"
         static let voiceNoteShortcut = "voiceNoteShortcut"
         static let pillPositionX = "pillPositionX"
@@ -60,6 +62,14 @@ final class PreferencesStore: ObservableObject {
     }
     @Published var theme: AppTheme {
         didSet { defaults.set(theme.rawValue, forKey: Key.theme) }
+    }
+    /// Which transcription engine to use: "apple" or "whisper".
+    @Published var transcriptionEngineID: String {
+        didSet { defaults.set(transcriptionEngineID, forKey: Key.transcriptionEngineID) }
+    }
+    /// The Whisper model chosen for transcription (a `WhisperModelCatalog` id).
+    @Published var whisperModelID: String {
+        didSet { defaults.set(whisperModelID, forKey: Key.whisperModelID) }
     }
     /// UID of the microphone chosen in Settings (nil = automatic).
     @Published var microphoneDeviceUID: String? {
@@ -109,6 +119,8 @@ final class PreferencesStore: ObservableObject {
         transcriptionLanguage = defaults.string(forKey: Key.transcriptionLanguage) ?? "en-US"
         theme = AppTheme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .system
         microphoneDeviceUID = defaults.string(forKey: Key.microphoneDeviceUID)
+        transcriptionEngineID = defaults.string(forKey: Key.transcriptionEngineID) ?? "apple"
+        whisperModelID = defaults.string(forKey: Key.whisperModelID) ?? WhisperModelCatalog.defaultMultilingual
         toggleRecordingShortcut = Self.loadShortcut(from: defaults, key: Key.toggleRecordingShortcut,
                                                     fallback: .defaultToggleRecording)
         voiceNoteShortcut = Self.loadShortcut(from: defaults, key: Key.voiceNoteShortcut, fallback: nil)
