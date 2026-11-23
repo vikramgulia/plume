@@ -92,6 +92,20 @@ final class RecordingLibrary: ObservableObject {
         recordings.removeAll { $0.id == item.id }
     }
 
+    /// Removes the transcript files next to a recording and keeps the recording.
+    func deleteTranscript(_ item: RecordingItem) throws {
+        let url = try PathGuard.assertAudioFile(item.fileURL, saveFolder: prefs.saveFolder)
+        for ext in PathGuard.transcriptExtensions {
+            let side = PathGuard.sidecarURL(for: url, ext: ext)
+            if FileManager.default.fileExists(atPath: side.path) {
+                try FileManager.default.removeItem(at: side)
+            }
+        }
+        if let idx = recordings.firstIndex(where: { $0.id == item.id }) {
+            recordings[idx].transcriptURL = nil
+        }
+    }
+
     func rename(_ item: RecordingItem, to newName: String) throws -> RecordingItem {
         let old = try PathGuard.assertAudioFile(item.fileURL, saveFolder: prefs.saveFolder)
         let ext = old.pathExtension
