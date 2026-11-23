@@ -41,11 +41,14 @@ struct TranscriptionProgress {
     var transcriptURL: URL?
 }
 
-enum TranscriptionError: LocalizedError {
+enum TranscriptionError: LocalizedError, Equatable {
     case speechUnavailable
     case localeUnsupported
     case emptyAudio
     case noTranscript
+    case modelMissing
+    case modelInstallFailed(String)
+    case engineFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -57,6 +60,12 @@ enum TranscriptionError: LocalizedError {
             return "The recording contains no audio."
         case .noTranscript:
             return "Transcript was not created."
+        case .modelMissing:
+            return "The Whisper model is not installed. Download it in Settings, or switch to Apple Speech."
+        case .modelInstallFailed(let message):
+            return "The model could not be downloaded: \(message)"
+        case .engineFailed(let detail):
+            return "Transcription failed: \(detail)."
         }
     }
 }
@@ -68,15 +77,30 @@ final class TranscriptionService: ObservableObject {
     private var queue: [URL] = []
     private var activeURL: URL?
     private let prefs = PreferencesStore.shared
-    private let engine: TranscriptionEngine
+    /// The engine that is always available: Apple's on-device speech recognition.
+    private let fallbackEngine: TranscriptionEngine
+    private let alternatives: [TranscriptionEngine]
+    private var runningEngine: TranscriptionEngine?
 
-    init(engine: TranscriptionEngine) {
-        self.engine = engine
+    init(engine: TranscriptionEngine, alternatives: [TranscriptionEngine] = []) {
+        self.fallbackEngine = engine
+        self.alternatives = alternatives
     }
 
-    /// The app's engine: Apple's on-device speech recognition.
+    /// Apple Speech, plus Whisper when the user has chosen it and its model is installed.
     convenience init() {
-        self.init(engine: AppleSpeechEngine())
+        self.init(engine: AppleSpeechEngine(), alternatives: [WhisperEngine()])
+    }
+
+    /// The engine chosen in Settings, falling back to Apple Speech when that engine is not ready
+    /// (for example its model has not been downloaded).
+    private var engine: TranscriptionEngine {
+        let chosen = prefs.transcriptionEngineID
+        if chosen != fallbackEngine.id,
+           let preferred = alternatives.first(where: { $0.id == chosen }), preferred.isAvailable {
+            return preferred
+        }
+        return fallbackEngine
     }
 
     // MARK: Job status
@@ -102,7 +126,7 @@ final class TranscriptionService: ObservableObject {
 
     func cancel(_ url: URL) {
         if activeURL == url {
-            let engine = engine
+            let engine = runningEngine ?? engine
             Task { await engine.cancel() }
             activeURL = nil
             jobs[url.path] = TranscriptionProgress(fileURL: url, status: .cancelled, progress: 0)
@@ -276,10 +300,13 @@ final class TranscriptionService: ObservableObject {
 
     private func runJob(_ fileURL: URL) async {
         do {
+            let engine = engine
+            runningEngine = engine
+            defer { runningEngine = nil }
             guard engine.isAvailable else {
                 throw TranscriptionError.speechUnavailable
             }
-            guard let locale = await resolvedLocale() else {
+            guard let locale = await engine.resolveLocale(prefs.transcriptionLanguage) else {
                 throw TranscriptionError.localeUnsupported
             }
             let segments = try await engine.transcribe(fileURL, locale: locale) { [weak self] status, progress in

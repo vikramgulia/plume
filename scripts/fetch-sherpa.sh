@@ -10,6 +10,9 @@ LIBS_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.3/sherpa
 SEG_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
 # The static-lib archive ships no headers; the C API header comes from the same tag.
 HEADER_URL="https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.3/sherpa-onnx/c-api/c-api.h"
+# Silero voice activity detector, bundled in the app: cuts recordings into speech chunks for Whisper.
+VAD_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
+VAD_SHA256="9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
 EMB_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx"
 
 fetch() {
@@ -54,6 +57,16 @@ else
 fi
 
 fetch "$EMB_URL" "$MODELS/embedding.onnx"
+
+sha256_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi
+}
+fetch "$VAD_URL" "$MODELS/silero_vad.onnx"
+if [[ "$(sha256_of "$MODELS/silero_vad.onnx")" != "$VAD_SHA256" ]]; then
+  echo "ERROR: silero_vad.onnx does not match its expected checksum" >&2
+  rm -f "$MODELS/silero_vad.onnx"
+  exit 1
+fi
 
 echo ""
 echo "Sizes:"
