@@ -60,6 +60,18 @@ struct HomeView: View {
                 Text(formatElapsed(app.recording.elapsed))
                     .font(.system(.title2, design: .monospaced))
                     .padding(.top, 8)
+                if app.liveCaptions.isRunning {
+                    Button {
+                        if CaptionPanelController.shared.isVisible {
+                            CaptionPanelController.shared.hide()
+                        } else {
+                            CaptionPanelController.shared.show(service: app.liveCaptions)
+                        }
+                    } label: {
+                        Label("Show or hide captions", systemImage: "captions.bubble")
+                    }
+                    .buttonStyle(.bordered)
+                }
             } else {
                 Button {
                     Task { await app.startVoiceNote() }

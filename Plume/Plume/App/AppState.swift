@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
     let permissions = PermissionsService()
     let transcription = TranscriptionService()
     let hotKeys = GlobalHotKeyService()
+    let liveCaptions = LiveCaptionService()
 
     @Published var selectedTab: Tab = .home
     @Published var toast: String?
@@ -62,12 +63,42 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        liveCaptions.onProblem = { [weak self] message in
+            Task { @MainActor in self?.showToast(message) }
+        }
+        liveCaptions.objectWillChange.receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        recording.onLiveAudio = { [weak self] data, source in
+            self?.liveCaptions.feed(data, source: source)
+        }
+        recording.$state
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                Task { @MainActor in
+                    if state == .recording, self.preferences.liveCaptions {
+                        await self.startLiveCaptions()
+                    } else if state != .recording {
+                        CaptionPanelController.shared.hide()
+                        await self.liveCaptions.stop()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
         recording.$elapsed
             .receive(on: RunLoop.main)
             .sink { elapsed in
                 PillController.shared.setElapsed(elapsed)
             }
             .store(in: &cancellables)
+    }
+
+    func startLiveCaptions() async {
+        let sources: [CaptionSource] = recording.mode == .voiceNote ? [.you] : [.others, .you]
+        await liveCaptions.start(sources: sources, language: preferences.transcriptionLanguage)
+        if liveCaptions.isRunning { CaptionPanelController.shared.show(service: liveCaptions) }
     }
 
     func showToast(_ message: String) {
