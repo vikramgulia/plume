@@ -325,6 +325,14 @@ struct RecordingRowView: View {
                     HStack {
                         Text("Transcript").font(.caption).foregroundStyle(.secondary)
                         Spacer()
+                        Menu {
+                            ForEach(TranscriptFormat.allCases) { format in
+                                Button(format.menuTitle) { exportTranscript(format) }
+                            }
+                        } label: { Image(systemName: "square.and.arrow.up") }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Export transcript")
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(transcriptText, forType: .string)
@@ -399,6 +407,13 @@ struct RecordingRowView: View {
     }
 
     private func liveTranscriptText() -> String? {
+        guard let segments = currentSegments() else { return nil }
+        return TranscriptionService.renderLabeledText(segments)
+    }
+
+    /// The saved timed segments, with speaker names taken from the speaker library as it is now,
+    /// so renamed speakers show their new names. Nil when the recording has no JSON sidecar.
+    private func currentSegments() -> [LabeledSegment]? {
         let jsonURL = PathGuard.sidecarURL(for: item.fileURL, ext: "json")
         guard FileManager.default.fileExists(atPath: jsonURL.path),
               let data = try? Data(contentsOf: jsonURL),
@@ -406,13 +421,37 @@ struct RecordingRowView: View {
             return nil
         }
         let profiles = SpeakerLibrary.shared.profiles()
-        let segments = doc.segments.map { seg -> LabeledSegment in
+        return doc.segments.map { seg -> LabeledSegment in
             if let sid = seg.speakerId, let uuid = UUID(uuidString: sid),
                let profile = profiles.first(where: { $0.id == uuid }) {
                 return LabeledSegment(start: seg.start, end: seg.end, speakerId: seg.speakerId, speaker: profile.name, text: seg.text)
             }
             return seg
         }
-        return TranscriptionService.renderLabeledText(segments)
+    }
+
+    private func exportTranscript(_ format: TranscriptFormat) {
+        let baseName = item.fileURL.deletingPathExtension().lastPathComponent
+        guard let content = TranscriptExporter.render(
+            format, segments: currentSegments(), plainText: transcriptText,
+            title: baseName, date: item.createdAt, duration: item.duration) else {
+            app.showToast("Subtitles need timestamps. Re-transcribe this recording first.")
+            return
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(baseName).\(format.fileExtension)"
+        panel.directoryURL = item.fileURL.deletingLastPathComponent()
+        panel.canCreateDirectories = true
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            var message: String
+            do {
+                try content.write(to: url, atomically: true, encoding: .utf8)
+                message = "Exported \(url.lastPathComponent)"
+            } catch {
+                message = "Could not export: \(error.localizedDescription)"
+            }
+            Task { @MainActor in app.showToast(message) }
+        }
     }
 }
