@@ -66,9 +66,18 @@ final class TranscriptionService: ObservableObject {
     @Published var jobs: [String: TranscriptionProgress] = [:]
 
     private var queue: [URL] = []
-    private var activeAnalyzer: SpeechAnalyzer?
     private var activeURL: URL?
     private let prefs = PreferencesStore.shared
+    private let engine: TranscriptionEngine
+
+    init(engine: TranscriptionEngine) {
+        self.engine = engine
+    }
+
+    /// The app's engine: Apple's on-device speech recognition.
+    convenience init() {
+        self.init(engine: AppleSpeechEngine())
+    }
 
     // MARK: Job status
 
@@ -93,9 +102,8 @@ final class TranscriptionService: ObservableObject {
 
     func cancel(_ url: URL) {
         if activeURL == url {
-            let analyzer = activeAnalyzer
-            Task { await analyzer?.cancelAndFinishNow() }
-            activeAnalyzer = nil
+            let engine = engine
+            Task { await engine.cancel() }
             activeURL = nil
             jobs[url.path] = TranscriptionProgress(fileURL: url, status: .cancelled, progress: 0)
             pump()
@@ -105,26 +113,26 @@ final class TranscriptionService: ObservableObject {
         jobs[url.path] = TranscriptionProgress(fileURL: url, status: .cancelled, progress: 0)
     }
 
-    // MARK: Locale assets (Settings UI)
+    // MARK: Language assets (Settings UI)
 
     func supportedLocales() async -> [Locale] {
-        await SpeechTranscriber.supportedLocales
+        await engine.supportedLocales()
     }
 
     func resolvedLocale() async -> Locale? {
-        await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: prefs.transcriptionLanguage))
+        await engine.resolveLocale(prefs.transcriptionLanguage)
     }
 
-    func assetStatus() async -> AssetInventory.Status? {
+    func assetStatus() async -> EngineAssetStatus? {
         guard let locale = await resolvedLocale() else { return nil }
-        return await AssetInventory.status(forModules: [SpeechTranscriber(locale: locale, preset: .transcription)])
+        return await engine.assetStatus(for: locale)
     }
 
     func installAssets() async throws {
         guard let locale = await resolvedLocale() else {
             throw TranscriptionError.localeUnsupported
         }
-        try await installAssets(for: locale, module: SpeechTranscriber(locale: locale, preset: .transcription))
+        try await engine.installAssets(for: locale)
     }
 
     // MARK: Transcript sidecar
@@ -262,54 +270,21 @@ final class TranscriptionService: ObservableObject {
 
     private func finishJob(_ fileURL: URL) {
         guard activeURL == fileURL else { return }
-        activeAnalyzer = nil
         activeURL = nil
         pump()
     }
 
     private func runJob(_ fileURL: URL) async {
         do {
-            guard SpeechTranscriber.isAvailable else {
+            guard engine.isAvailable else {
                 throw TranscriptionError.speechUnavailable
             }
             guard let locale = await resolvedLocale() else {
                 throw TranscriptionError.localeUnsupported
             }
-            let module = SpeechTranscriber(locale: locale, preset: .transcription)
-            try await ensureAssets(for: locale, module: module, fileURL: fileURL)
-
-            update(fileURL, status: .transcribing, progress: -1)
-            let audioFile = try AVAudioFile(forReading: fileURL)
-            let duration = Double(audioFile.length) / audioFile.processingFormat.sampleRate
-
-            // SpeechAnalyzer transcribes only one channel of stereo input, so
-            // transcribe a mono downmix that carries both sides.
-            var transcribeURL = fileURL
-            var tempMix: URL? = nil
-            if audioFile.processingFormat.channelCount > 1 {
-                tempMix = try Self.writeMonoMixdown(of: audioFile)
-                transcribeURL = tempMix!
+            let segments = try await engine.transcribe(fileURL, locale: locale) { [weak self] status, progress in
+                self?.update(fileURL, status: status, progress: progress)
             }
-            defer {
-                if let tempMix {
-                    try? FileManager.default.removeItem(at: tempMix)
-                }
-            }
-
-            let analyzer = SpeechAnalyzer(modules: [module])
-            activeAnalyzer = analyzer
-
-            // The results sequence must have a consumer before analyzeSequence runs.
-            async let timedSegments = collectResults(from: module, fileURL: fileURL, duration: duration)
-
-            let mixdownFile = try AVAudioFile(forReading: transcribeURL)
-            guard let lastSample = try await analyzer.analyzeSequence(from: mixdownFile) else {
-                await analyzer.cancelAndFinishNow()
-                throw TranscriptionError.emptyAudio
-            }
-            try await analyzer.finalizeAndFinish(through: lastSample)
-
-            let segments = try await timedSegments
             guard !segments.isEmpty else {
                 throw TranscriptionError.emptyAudio
             }
@@ -346,49 +321,6 @@ final class TranscriptionService: ObservableObject {
             }
         }
         finishJob(fileURL)
-    }
-
-    private func collectResults(from module: SpeechTranscriber, fileURL: URL, duration: Double) async throws -> [TimedSegment] {
-        var segments: [TimedSegment] = []
-        for try await result in module.results {
-            let chunk = String(result.text.characters)
-            if !chunk.isEmpty {
-                let start = max(0, result.range.start.seconds)
-                let end = result.range.end.seconds
-                // Merge chunks that continue the same utterance.
-                if let last = segments.last, abs(last.end - start) < 0.5 {
-                    segments[segments.count - 1] = TimedSegment(
-                        start: last.start, end: max(last.end, end), text: last.text + " " + chunk)
-                } else {
-                    segments.append(TimedSegment(start: start, end: end, text: chunk))
-                }
-            }
-            if duration > 0, duration.isFinite {
-                let fraction = min(100, max(0, result.range.end.seconds / duration * 100))
-                update(fileURL, status: .transcribing, progress: fraction)
-            }
-        }
-        return segments
-    }
-
-    private func ensureAssets(for locale: Locale, module: SpeechTranscriber, fileURL: URL) async throws {
-        let status = await AssetInventory.status(forModules: [module])
-        if status == .supported {
-            update(fileURL, status: .installingLocale, progress: 0)
-            try await installAssets(for: locale, module: module)
-        } else if status == .unsupported {
-            throw TranscriptionError.localeUnsupported
-        }
-    }
-
-    private func installAssets(for locale: Locale, module: SpeechTranscriber) async throws {
-        guard try await AssetInventory.reserve(locale: locale) else {
-            throw TranscriptionError.localeUnsupported
-        }
-        guard let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) else {
-            throw TranscriptionError.localeUnsupported
-        }
-        try await request.downloadAndInstall()
     }
 
     private func update(_ url: URL, status: TranscriptionJobStatus, progress: Double) {
