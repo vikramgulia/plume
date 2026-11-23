@@ -61,14 +61,19 @@ struct HomeView: View {
                     .font(.system(.title2, design: .monospaced))
                     .padding(.top, 8)
                 if app.liveCaptions.isRunning {
+                    CaptionLinesView(lines: app.liveCaptions.log.lines, maxLines: 3, onDark: false)
+                        .font(.callout)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
+                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                     Button {
                         if CaptionPanelController.shared.isVisible {
                             CaptionPanelController.shared.hide()
                         } else {
-                            CaptionPanelController.shared.show(service: app.liveCaptions)
+                            app.showCaptionPanel()
                         }
                     } label: {
-                        Label("Show or hide captions", systemImage: "captions.bubble")
+                        Label("Show or hide floating captions", systemImage: "captions.bubble")
                     }
                     .buttonStyle(.bordered)
                 }

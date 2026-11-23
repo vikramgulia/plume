@@ -98,7 +98,20 @@ final class AppState: ObservableObject {
     func startLiveCaptions() async {
         let sources: [CaptionSource] = recording.mode == .voiceNote ? [.you] : [.others, .you]
         await liveCaptions.start(sources: sources, language: preferences.transcriptionLanguage)
-        if liveCaptions.isRunning { CaptionPanelController.shared.show(service: liveCaptions) }
+        if liveCaptions.isRunning { showCaptionPanel() }
+    }
+
+    func showCaptionPanel() {
+        CaptionPanelController.shared.show(service: liveCaptions) { [weak self] in self?.openRecordingScreen() }
+    }
+
+    /// Brings Plume's window to the front on the Home (recording) screen.
+    func openRecordingScreen() {
+        selectedTab = .home
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = NSApp.windows.first(where: { !($0 is NSPanel) && $0.canBecomeMain }) {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     func showToast(_ message: String) {
