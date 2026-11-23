@@ -42,6 +42,10 @@ struct SettingsView: View {
                     Text("Runs locally on your Mac — no cloud")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    Toggle("Live captions while recording", isOn: $prefs.liveCaptions)
+                    Text("Shows a floating panel with You and Others lines as people speak. Uses Apple Speech and needs its language installed; the saved transcript is still made after recording with your chosen engine. Adds some CPU use.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                     Divider()
                     row("Engine", "Whisper is more accurate; Apple Speech needs no download") {
                         Picker("", selection: $prefs.transcriptionEngineID) {

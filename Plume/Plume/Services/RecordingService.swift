@@ -34,6 +34,8 @@ final class RecordingService: ObservableObject {
 
     /// Non-fatal problems while recording (for example the microphone stopped).
     var onNotice: ((String) -> Void)?
+    /// Receives every chunk of captured audio (48 kHz mono Float32) for live captions.
+    var onLiveAudio: ((Data, CaptionSource) -> Void)?
 
     /// Called when capture fails mid-recording and the partial recording was saved.
     var onUnexpectedStop: ((URL?) -> Void)?
@@ -114,6 +116,7 @@ final class RecordingService: ObservableObject {
                 self.receivedSystemAudio = true
                 if self.writer == nil { self.beginRecording(to: url) }
                 self.writer?.appendSystem(data)
+                self.onLiveAudio?(data, .others)
             }
         }
 
@@ -129,6 +132,7 @@ final class RecordingService: ObservableObject {
                 Task { @MainActor in
                     self?.micLevel = level
                     self?.writer?.appendMic(data)
+                    self?.onLiveAudio?(data, .you)
                 }
             }
             do {
@@ -181,6 +185,7 @@ final class RecordingService: ObservableObject {
                 guard let self else { return }
                 self.micLevel = level
                 self.writer?.appendMic(data)
+                self.onLiveAudio?(data, .you)
             }
         }
         do {

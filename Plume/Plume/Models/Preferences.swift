@@ -34,6 +34,7 @@ final class PreferencesStore: ObservableObject {
         static let transcriptionEngineID = "transcriptionEngineID"
         static let whisperModelID = "whisperModelID"
         static let whisperOfferHandled = "whisperOfferHandled"
+        static let liveCaptions = "liveCaptions"
         static let toggleRecordingShortcut = "toggleRecordingShortcut"
         static let voiceNoteShortcut = "voiceNoteShortcut"
         static let pillPositionX = "pillPositionX"
@@ -69,6 +70,10 @@ final class PreferencesStore: ObservableObject {
         didSet { defaults.set(transcriptionEngineID, forKey: Key.transcriptionEngineID) }
     }
     /// The Whisper model chosen for transcription (a `WhisperModelCatalog` id).
+    /// Show live captions in a floating panel while recording (off by default).
+    @Published var liveCaptions: Bool {
+        didSet { defaults.set(liveCaptions, forKey: Key.liveCaptions) }
+    }
     /// True once the user has answered (or dismissed) the first-run offer to download Whisper.
     @Published var whisperOfferHandled: Bool {
         didSet { defaults.set(whisperOfferHandled, forKey: Key.whisperOfferHandled) }
@@ -127,6 +132,7 @@ final class PreferencesStore: ObservableObject {
         transcriptionEngineID = defaults.string(forKey: Key.transcriptionEngineID) ?? "apple"
         whisperModelID = defaults.string(forKey: Key.whisperModelID) ?? WhisperModelCatalog.defaultMultilingual
         whisperOfferHandled = defaults.bool(forKey: Key.whisperOfferHandled)
+        liveCaptions = defaults.bool(forKey: Key.liveCaptions)
         toggleRecordingShortcut = Self.loadShortcut(from: defaults, key: Key.toggleRecordingShortcut,
                                                     fallback: .defaultToggleRecording)
         voiceNoteShortcut = Self.loadShortcut(from: defaults, key: Key.voiceNoteShortcut, fallback: nil)
