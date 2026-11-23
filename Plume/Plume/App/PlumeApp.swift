@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct ContentView: View {
     @EnvironmentObject var app: AppState
+    @EnvironmentObject var prefs: PreferencesStore
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -116,6 +117,12 @@ struct ContentView: View {
             if let toast = app.toast {
                 ToastBanner(message: toast)
             }
+        }
+        .sheet(isPresented: Binding(
+            get: { !prefs.whisperOfferHandled && WhisperModelStore.shared.installedModels.isEmpty },
+            set: { if !$0 { prefs.whisperOfferHandled = true } }
+        )) {
+            WhisperOfferSheet().environmentObject(prefs)
         }
     }
 }

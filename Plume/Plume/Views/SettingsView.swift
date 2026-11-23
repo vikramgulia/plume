@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var prefs: PreferencesStore
     @ObservedObject private var speakers = SpeakerLibrary.shared
+    @ObservedObject private var whisperStore = WhisperModelStore.shared
     @State private var languages: [Locale] = []
     @State private var assetStatus: EngineAssetStatus?
     @State private var installing = false
@@ -41,6 +42,29 @@ struct SettingsView: View {
                     Text("Runs locally on your Mac — no cloud")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    Divider()
+                    row("Engine", "Whisper is more accurate; Apple Speech needs no download") {
+                        Picker("", selection: $prefs.transcriptionEngineID) {
+                            Text("Apple Speech").tag("apple")
+                            Text("Whisper").tag("whisper")
+                        }
+                        .labelsHidden()
+                        .frame(width: 140)
+                        .onChange(of: prefs.transcriptionEngineID) { _ in
+                            Task {
+                                languages = await app.transcription.supportedLocales()
+                                await refreshAssets()
+                            }
+                        }
+                    }
+                    if prefs.transcriptionEngineID == "whisper" {
+                        Divider()
+                        WhisperModelsView()
+                        if !WhisperModelStore.shared.isInstalled(WhisperModelCatalog.model(id: prefs.whisperModelID) ?? WhisperModelCatalog.models[1]) {
+                            Text("The selected model is not downloaded, so Plume is using Apple Speech for now.")
+                                .font(.caption2).foregroundStyle(.orange)
+                        }
+                    }
                     Divider()
                     HStack {
                         Text("Language")
