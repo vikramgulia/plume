@@ -20,7 +20,7 @@ Built with SwiftUI and Apple's ScreenCaptureKit. No virtual audio drivers needed
 ## Privacy
 
 - Audio, transcripts and speaker profiles stay in your save folder (default `~/Documents/Plume`) and app preferences
-- Transcription and speaker identification run entirely on-device; Plume makes no network calls for them
+- Transcription and speaker identification run entirely on-device. The only network use is the optional, one-time download of a Whisper model (from GitHub) when you choose to; your audio is never uploaded
 - Speech language assets are managed by macOS and downloaded by the system only when you pick a language
 
 ## Requirements
@@ -103,6 +103,8 @@ Preferences use `UserDefaults` (app suite). Defaults:
 | `showFloatingPill` | `true` | Floating timer panel |
 | `openInFinderAfter` | `false` | Reveal file after stop |
 | `autoTranscribe` | `false` | Transcribe when recording stops |
+| `transcriptionEngineID` | `apple` | `apple` or `whisper` |
+| `whisperModelID` | `small` | Which downloaded Whisper model to use |
 | `transcriptionLanguage` | `en-US` | BCP-47 locale for on-device transcription |
 | `theme` | `system` | `system` / `light` / `dark` |
 
@@ -119,7 +121,7 @@ SwiftUI (Home / Recordings / Settings / MenuBarExtra / Pill)
 
 ## Transcription
 
-Fully local: transcripts via Apple's **Speech framework** (`SpeechAnalyzer` + `SpeechTranscriber`, macOS 26+), speaker labels via **sherpa-onnx** (bundled models). Transcripts are written as `.txt` sidecars next to recordings (`Recording ….txt`). Language models are system-managed on-device assets, fetched by macOS via `AssetInventory` when needed; your audio and text never leave your Mac.
+Fully local: transcripts via **Whisper** (through sherpa-onnx) once you download a model — on first launch Plume offers Small, multilingual or English-only, ~640 MB — or via Apple's **Speech framework** (`SpeechAnalyzer` + `SpeechTranscriber`, macOS 26+) as the built-in fallback, which works but is less accurate. Speaker labels come from **sherpa-onnx** (bundled models). Transcripts are written as `.txt` sidecars next to recordings (`Recording ….txt`). Language models are system-managed on-device assets, fetched by macOS via `AssetInventory` when needed; your audio and text never leave your Mac.
 
 Supported locales (on-device): English (en-US), German (de-DE), Spanish (es-419), French (fr-FR), Italian (it-IT), Japanese (ja-JP), Korean (ko-KR), Portuguese (pt-BR), Chinese (zh-CN). Check Settings → Transcription for the live list on your Mac.
 

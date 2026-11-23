@@ -33,6 +33,7 @@ final class PreferencesStore: ObservableObject {
         static let microphoneDeviceUID = "microphoneDeviceUID"
         static let transcriptionEngineID = "transcriptionEngineID"
         static let whisperModelID = "whisperModelID"
+        static let whisperOfferHandled = "whisperOfferHandled"
         static let toggleRecordingShortcut = "toggleRecordingShortcut"
         static let voiceNoteShortcut = "voiceNoteShortcut"
         static let pillPositionX = "pillPositionX"
@@ -68,6 +69,10 @@ final class PreferencesStore: ObservableObject {
         didSet { defaults.set(transcriptionEngineID, forKey: Key.transcriptionEngineID) }
     }
     /// The Whisper model chosen for transcription (a `WhisperModelCatalog` id).
+    /// True once the user has answered (or dismissed) the first-run offer to download Whisper.
+    @Published var whisperOfferHandled: Bool {
+        didSet { defaults.set(whisperOfferHandled, forKey: Key.whisperOfferHandled) }
+    }
     @Published var whisperModelID: String {
         didSet { defaults.set(whisperModelID, forKey: Key.whisperModelID) }
     }
@@ -121,6 +126,7 @@ final class PreferencesStore: ObservableObject {
         microphoneDeviceUID = defaults.string(forKey: Key.microphoneDeviceUID)
         transcriptionEngineID = defaults.string(forKey: Key.transcriptionEngineID) ?? "apple"
         whisperModelID = defaults.string(forKey: Key.whisperModelID) ?? WhisperModelCatalog.defaultMultilingual
+        whisperOfferHandled = defaults.bool(forKey: Key.whisperOfferHandled)
         toggleRecordingShortcut = Self.loadShortcut(from: defaults, key: Key.toggleRecordingShortcut,
                                                     fallback: .defaultToggleRecording)
         voiceNoteShortcut = Self.loadShortcut(from: defaults, key: Key.voiceNoteShortcut, fallback: nil)
