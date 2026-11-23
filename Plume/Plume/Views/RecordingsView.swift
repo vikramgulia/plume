@@ -182,6 +182,8 @@ struct RecordingRowView: View {
     /// The wide layout's detail pane: the transcript grows to fill the available height.
     var expanded = false
     var onRenamed: ((RecordingItem) -> Void)?
+    private enum DeleteTarget { case transcript, recording }
+    @State private var confirmDelete: DeleteTarget?
     @State private var renaming = false
     @State private var name = ""
     @State private var transcriptOpen = false
@@ -230,8 +232,11 @@ struct RecordingRowView: View {
                             renaming = true
                         }
                         Divider()
-                        Button("Delete…", role: .destructive) {
-                            try? app.library.delete(item)
+                        if item.hasTranscript {
+                            Button("Delete Transcript…", role: .destructive) { confirmDelete = .transcript }
+                        }
+                        Button(item.hasTranscript ? "Delete Recording and Transcript…" : "Delete Recording…", role: .destructive) {
+                            confirmDelete = .recording
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -362,6 +367,30 @@ struct RecordingRowView: View {
         .padding(.top, 8)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .frame(maxHeight: expanded ? CGFloat.infinity : nil, alignment: .top)
+        .confirmationDialog(
+            confirmDelete == .transcript ? "Delete this transcript?" : "Delete this recording?",
+            isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button(confirmDelete == .transcript ? "Delete Transcript" : "Delete", role: .destructive) {
+                switch confirmDelete {
+                case .transcript:
+                    try? app.library.deleteTranscript(item)
+                    transcriptOpen = false
+                    transcriptText = ""
+                case .recording:
+                    try? app.library.delete(item)
+                case nil:
+                    break
+                }
+                confirmDelete = nil
+            }
+            Button("Cancel", role: .cancel) { confirmDelete = nil }
+        } message: {
+            Text(confirmDelete == .transcript
+                 ? "The recording is kept. You can transcribe it again later."
+                 : "The audio and its transcript are deleted permanently.")
+        }
         .onReceive(app.transcription.$jobs) { jobs in
             if jobs[item.fileURL.path]?.status == .complete, !transcriptOpen {
                 loadTranscript()

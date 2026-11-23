@@ -22,19 +22,32 @@ private struct Rating: View {
     }
 }
 
-/// Lists the Whisper models with their quality and size, and lets the user pick, download or delete them.
+/// A dropdown of Whisper models. Choosing one shows its quality and size and a Download button;
+/// once downloaded it is shown as downloaded, with its size on disk.
 /// Nothing is downloaded until the user presses Download and confirms.
 struct WhisperModelsView: View {
     @EnvironmentObject var prefs: PreferencesStore
     @ObservedObject var store: WhisperModelStore = .shared
     @State private var pendingDownload: WhisperModel?
 
+    private var model: WhisperModel {
+        WhisperModelCatalog.model(id: prefs.whisperModelID) ?? WhisperModelCatalog.models[0]
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(WhisperModelCatalog.models) { model in
-                modelRow(model)
-                if model.id != WhisperModelCatalog.models.last?.id { Divider() }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Model")
+                Spacer()
+                Picker("", selection: $prefs.whisperModelID) {
+                    ForEach(WhisperModelCatalog.models) { m in
+                        Text(store.isInstalled(m) ? "\(m.name) — downloaded" : m.name).tag(m.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220)
             }
+            details(for: model, state: store.state(for: model))
         }
         .confirmationDialog(
             pendingDownload.map { "Download \($0.name)?" } ?? "",
@@ -44,7 +57,6 @@ struct WhisperModelsView: View {
             if let model = pendingDownload {
                 Button("Download \(sizeText(model.archiveBytes))") {
                     store.startInstall(model)
-                    prefs.whisperModelID = model.id
                 }
                 Button("Cancel", role: .cancel) {}
             }
@@ -56,53 +68,40 @@ struct WhisperModelsView: View {
     }
 
     @ViewBuilder
-    private func modelRow(_ model: WhisperModel) -> some View {
-        let state = store.state(for: model)
-        let selected = prefs.whisperModelID == model.id
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(model.name).fontWeight(.medium)
-                if selected, state == .installed {
-                    Text("In use").font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor)
-                }
+    private func details(for model: WhisperModel, state: ModelInstallState) -> some View {
+        Text(model.summary).font(.caption).foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            Rating(label: "Accuracy", value: model.accuracy)
+            Rating(label: "Speed", value: model.speed)
+        }
+        switch state {
+        case .installed:
+            HStack {
+                Label("Downloaded · \(sizeText(model.installedBytes)) on this Mac", systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(.green)
                 Spacer()
-                action(for: model, state: state, selected: selected)
+                Button("Delete", role: .destructive) { store.remove(model) }.controlSize(.small)
             }
-            Text(model.summary).font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                Rating(label: "Accuracy", value: model.accuracy)
-                Rating(label: "Speed", value: model.speed)
+        case .downloading(let p):
+            HStack {
+                ProgressView(value: p)
+                Button("Cancel") { store.cancelInstall(model) }.controlSize(.small)
+            }
+        case .verifying, .unpacking:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Installing…").font(.caption).foregroundStyle(.secondary)
+            }
+        case .notInstalled, .failed:
+            HStack {
                 Text("\(sizeText(model.archiveBytes)) download · \(sizeText(model.installedBytes)) on disk")
                     .font(.caption2).foregroundStyle(.secondary)
-            }
-            if case .downloading(let p) = state {
-                ProgressView(value: p)
-            } else if state == .verifying || state == .unpacking {
-                ProgressView().controlSize(.small)
+                Spacer()
+                Button("Download") { pendingDownload = model }.controlSize(.small)
             }
             if case .failed(let message) = state {
                 Text(message).font(.caption).foregroundStyle(.red)
             }
-        }
-    }
-
-    @ViewBuilder
-    private func action(for model: WhisperModel, state: ModelInstallState, selected: Bool) -> some View {
-        switch state {
-        case .installed:
-            HStack {
-                if !selected {
-                    Button("Use") { prefs.whisperModelID = model.id }
-                }
-                Button("Delete", role: .destructive) { store.remove(model) }
-            }
-            .controlSize(.small)
-        case .downloading:
-            Button("Cancel") { store.cancelInstall(model) }.controlSize(.small)
-        case .verifying, .unpacking:
-            Text("Installing…").font(.caption).foregroundStyle(.secondary)
-        case .notInstalled, .failed:
-            Button("Download") { pendingDownload = model }.controlSize(.small)
         }
     }
 }
